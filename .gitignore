@@ -46,6 +46,7 @@ app.*.map.json
 
 # Yakut — secrets & generated files
 .env.json
+.env
 *.jks
 *.keystore
 google-services.json
