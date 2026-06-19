@@ -16,6 +16,7 @@ import '../../../../features/auth/presentation/providers/auth_provider.dart';
 import '../../domain/entities/live_stream_entity.dart';
 import '../../domain/entities/live_stream_message_entity.dart';
 import '../../../../features/products/presentation/providers/product_provider.dart';
+import '../../../../features/products/presentation/providers/follow_provider.dart';
 
 class LiveStreamScreen extends ConsumerStatefulWidget {
   final String streamId;
@@ -42,7 +43,6 @@ class _LiveStreamScreenState extends ConsumerState<LiveStreamScreen>
   List<_ActiveGiftCombo> _giftCombos = [];
   List<LiveStreamChatFeedItem> _localEvents = [];
   final Set<String> _trackedViewerIds = {};
-  bool _isFollowing = false;
 
   @override
   void initState() {
@@ -55,16 +55,65 @@ class _LiveStreamScreenState extends ConsumerState<LiveStreamScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    // When the app is detached (being killed), end the live stream.
-    if (state == AppLifecycleState.detached) {
-      _leaveSync();
+    
+    // Manage stream state depending on the role (host vs viewer)
+    if (_isHost) {
+      if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+        // Host minimized / switched app: set paused state in presence and mute Agora
+        _updateHostPauseState(true);
+      } else if (state == AppLifecycleState.resumed) {
+        // Host returned to app: clear paused state in presence, restore Agora, and check status
+        _updateHostPauseState(false);
+        _checkIfStreamEnded();
+      } else if (state == AppLifecycleState.detached) {
+        // Host killed the app: gracefully end the live stream
+        _leaveSync();
+      }
+    } else {
+      // For viewers: they can background and return to the app.
+      // But if the app is killed (detached), clean up their viewer count.
+      if (state == AppLifecycleState.detached) {
+        _leaveSync();
+      }
     }
-    // When the host backgrounds the app, also end the stream since
-    // the camera/mic are no longer accessible and the stream is stale.
-    // Viewers are not affected — they can return to the app.
-    if (state == AppLifecycleState.paused && _isHost) {
-      _leaveSync();
+  }
+
+  void _updateHostPauseState(bool paused) {
+    if (!_isHost) return;
+    
+    final user = ref.read(authNotifierProvider).valueOrNull;
+    if (user == null) return;
+
+    // 1. Update presence metadata so current/new viewers see the pause state
+    _presenceChannel?.track({
+      'user_id': user.id,
+      'full_name': user.fullName ?? 'User',
+      'avatar_url': user.avatarUrl,
+      'is_paused': paused,
+    });
+
+    // 2. Mute local camera and microphone on Agora
+    final agoraNotifier = ref.read(agoraProvider.notifier);
+    if (paused) {
+      agoraNotifier.engine?.muteLocalAudioStream(true);
+      agoraNotifier.engine?.muteLocalVideoStream(true);
+    } else {
+      final agoraState = ref.read(agoraProvider);
+      agoraNotifier.engine?.muteLocalAudioStream(agoraState.isMuted);
+      agoraNotifier.engine?.muteLocalVideoStream(agoraState.isCameraOff);
     }
+  }
+
+  void _checkIfStreamEnded() async {
+    try {
+      final streamDetail = await ref.read(streamRepositoryProvider).getStreamById(widget.streamId);
+      if (streamDetail.isEnded && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('The live stream was ended due to inactivity')),
+        );
+        _leave();
+      }
+    } catch (_) {}
   }
 
   /// Synchronous best-effort cleanup for when the app is being killed.
@@ -161,11 +210,27 @@ class _LiveStreamScreenState extends ConsumerState<LiveStreamScreen>
 
   Future<void> _leave() async {
     if (_canPop) return;
-    await ref
-        .read(agoraProvider.notifier)
-        .leave(widget.streamId, isHost: _isHost);
+
+    // Immediately set _canPop to true to prevent concurrent/multiple calls to leave().
     if (mounted) {
-      setState(() => _canPop = true);
+      setState(() {
+        _canPop = true;
+      });
+    } else {
+      _canPop = true;
+    }
+
+    try {
+      // Safely end the live stream by stopping heartbeat, leaving Agora channel,
+      // and updating the live stream status on the database.
+      await ref
+          .read(agoraProvider.notifier)
+          .leave(widget.streamId, isHost: _isHost);
+    } catch (e) {
+      debugPrint('Error ending live stream: $e');
+    }
+
+    if (mounted) {
       context.pop();
     }
   }
@@ -341,36 +406,39 @@ class _LiveStreamScreenState extends ConsumerState<LiveStreamScreen>
           color: AppColors.card,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
-        child: Column(
-          children: [
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
-            const SizedBox(height: 16),
-            Text('Who is watching (${_viewersList.length})', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 16),
-            Expanded(
-              child: _viewersList.isEmpty
-                  ? const Center(child: Text('No viewers yet', style: TextStyle(color: Colors.white54)))
-                  : ListView.builder(
-                      itemCount: _viewersList.length,
-                      itemBuilder: (ctx, i) {
-                        final v = _viewersList[i];
-                        final avatarUrl = v['avatar_url'] as String?;
-                        final name = v['full_name'] as String? ?? 'User';
-                        return ListTile(
-                          leading: CircleAvatar(
-                            backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
-                            child: avatarUrl == null ? const Icon(Icons.person) : null,
-                          ),
-                          title: Text(name, style: const TextStyle(color: Colors.white)),
-                          onTap: () {
-                            Navigator.pop(ctx);
-                            context.push('/sellers/${v['user_id']}');
-                          },
-                        );
-                      },
-                    ),
-            ),
-          ],
+        child: SafeArea(
+          top: false,
+          child: Column(
+            children: [
+              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 16),
+              Text('Who is watching (${_viewersList.length})', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              Expanded(
+                child: _viewersList.isEmpty
+                    ? const Center(child: Text('No viewers yet', style: TextStyle(color: Colors.white54)))
+                    : ListView.builder(
+                        itemCount: _viewersList.length,
+                        itemBuilder: (ctx, i) {
+                          final v = _viewersList[i];
+                          final avatarUrl = v['avatar_url'] as String?;
+                          final name = v['full_name'] as String? ?? 'User';
+                          return ListTile(
+                            leading: CircleAvatar(
+                              backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
+                              child: avatarUrl == null ? const Icon(Icons.person) : null,
+                            ),
+                            title: Text(name, style: const TextStyle(color: Colors.white)),
+                            onTap: () {
+                              Navigator.pop(ctx);
+                              context.push('/sellers/${v['user_id']}');
+                            },
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -491,155 +559,158 @@ class _LiveStreamScreenState extends ConsumerState<LiveStreamScreen>
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
                 border: Border.all(color: Colors.white.withOpacity(0.15)),
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Drag Handle
-                  Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.white24,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  // Header: Balance & Title
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Send Gifts',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Drag Handle
+                    Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(2),
                       ),
-                      GestureDetector(
-                        onTap: () {
-                          // Refill balance for testing!
-                          setState(() {
-                            _userCoins += 1500;
-                          });
-                          setSheetState(() {});
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.amber.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: Colors.amber.withOpacity(0.4)),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Text(
-                                '🪙 ',
-                                style: TextStyle(fontSize: 14),
-                              ),
-                              Text(
-                                '$_userCoins Coins',
-                                style: const TextStyle(
-                                  color: Colors.amber,
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 13,
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              const Icon(Icons.add_circle_outline_rounded, size: 14, color: Colors.amber),
-                            ],
+                    ),
+                    const SizedBox(height: 16),
+                    // Header: Balance & Title
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Send Gifts',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  // Grid of Gifts
-                  GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: _kGifts.length,
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 4,
-                      mainAxisSpacing: 16,
-                      crossAxisSpacing: 12,
-                      childAspectRatio: 0.82,
-                    ),
-                    itemBuilder: (ctx, idx) {
-                      final gift = _kGifts[idx];
-                      final canAfford = _userCoins >= gift.coins;
-
-                      return GestureDetector(
-                        onTap: () {
-                          if (canAfford) {
-                            _sendGift(gift);
+                        GestureDetector(
+                          onTap: () {
+                            // Refill balance for testing!
+                            setState(() {
+                              _userCoins += 1500;
+                            });
                             setSheetState(() {});
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Insufficient coins! Tap the balance to refill.'),
-                                backgroundColor: AppColors.error,
-                              ),
-                            );
-                          }
-                        },
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.06),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: Colors.white.withOpacity(0.1),
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: Colors.amber.withOpacity(0.4)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text(
+                                  '🪙 ',
+                                  style: TextStyle(fontSize: 14),
+                                ),
+                                Text(
+                                  '$_userCoins Coins',
+                                  style: const TextStyle(
+                                    color: Colors.amber,
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                const Icon(Icons.add_circle_outline_rounded, size: 14, color: Colors.amber),
+                              ],
                             ),
                           ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                gift.icon,
-                                style: const TextStyle(fontSize: 32),
-                              ).animate().scale(
-                                begin: const Offset(0.8, 0.8),
-                                end: const Offset(1.0, 1.0),
-                                duration: 200.ms,
-                                curve: Curves.easeOutBack,
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                gift.name,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Text(
-                                    '🪙',
-                                    style: TextStyle(fontSize: 10),
-                                  ),
-                                  const SizedBox(width: 2),
-                                  Text(
-                                    '${gift.coins}',
-                                    style: TextStyle(
-                                      color: canAfford ? Colors.amber : Colors.white24,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w900,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
                         ),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                ],
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    // Grid of Gifts
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _kGifts.length,
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 4,
+                        mainAxisSpacing: 16,
+                        crossAxisSpacing: 12,
+                        childAspectRatio: 0.82,
+                      ),
+                      itemBuilder: (ctx, idx) {
+                        final gift = _kGifts[idx];
+                        final canAfford = _userCoins >= gift.coins;
+
+                        return GestureDetector(
+                          onTap: () {
+                            if (canAfford) {
+                              _sendGift(gift);
+                              setSheetState(() {});
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Insufficient coins! Tap the balance to refill.'),
+                                  backgroundColor: AppColors.error,
+                                ),
+                              );
+                            }
+                          },
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.06),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: Colors.white.withOpacity(0.1),
+                              ),
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  gift.icon,
+                                  style: const TextStyle(fontSize: 32),
+                                ).animate().scale(
+                                  begin: const Offset(0.8, 0.8),
+                                  end: const Offset(1.0, 1.0),
+                                  duration: 200.ms,
+                                  curve: Curves.easeOutBack,
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  gift.name,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Text(
+                                      '🪙',
+                                      style: TextStyle(fontSize: 10),
+                                    ),
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      '${gift.coins}',
+                                      style: TextStyle(
+                                        color: canAfford ? Colors.amber : Colors.white24,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                ),
               ),
             ),
           ),
@@ -674,45 +745,48 @@ class _LiveStreamScreenState extends ConsumerState<LiveStreamScreen>
           color: AppColors.card,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
-            const SizedBox(height: 20),
-            Text('Manage $senderName', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 20),
-            ListTile(
-              leading: const Icon(Icons.block_rounded, color: AppColors.error),
-              title: const Text('Block User', style: TextStyle(color: AppColors.error, fontWeight: FontWeight.bold)),
-              onTap: () async {
-                Navigator.pop(ctx);
-                try {
-                  await ref.read(streamRepositoryProvider).blockUser(
-                        streamId: widget.streamId,
-                        blockedUserId: senderId,
-                        blockedById: currentUser.id,
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 20),
+              Text('Manage $senderName', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 20),
+              ListTile(
+                leading: const Icon(Icons.block_rounded, color: AppColors.error),
+                title: const Text('Block User', style: TextStyle(color: AppColors.error, fontWeight: FontWeight.bold)),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  try {
+                    await ref.read(streamRepositoryProvider).blockUser(
+                          streamId: widget.streamId,
+                          blockedUserId: senderId,
+                          blockedById: currentUser.id,
+                        );
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('$senderName has been blocked')),
                       );
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('$senderName has been blocked')),
-                    );
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Failed to block: $e')),
+                      );
+                    }
                   }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Failed to block: $e')),
-                    );
-                  }
-                }
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.close_rounded, color: Colors.white70),
-              title: const Text('Cancel', style: TextStyle(color: Colors.white70)),
-              onTap: () => Navigator.pop(ctx),
-            ),
-            const SizedBox(height: 20),
-          ],
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.close_rounded, color: Colors.white70),
+                title: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+                onTap: () => Navigator.pop(ctx),
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
         ),
       ),
     );
@@ -795,6 +869,16 @@ class _LiveStreamScreenState extends ConsumerState<LiveStreamScreen>
       body: streamDetailAsync.when(
         data: (streamDetail) {
           final sellerAsync = ref.watch(userByIdProvider(streamDetail.sellerId));
+          final followedSellers = ref.watch(followedSellersProvider);
+          final isFollowing = followedSellers.contains(streamDetail.sellerId);
+
+          final isHostActive = _viewersList.any((v) => v['user_id'] == streamDetail.sellerId);
+          final hostPresence = _viewersList.firstWhere(
+            (v) => v['user_id'] == streamDetail.sellerId,
+            orElse: () => {},
+          );
+          final isHostPaused = hostPresence['is_paused'] == true;
+          final showPauseOverlay = !_isHost && (!isHostActive || isHostPaused);
 
           // Trigger brief hearts state when likes count changes remotely
           if (streamDetail.likesCount > _prevLikeCount) {
@@ -865,6 +949,60 @@ class _LiveStreamScreenState extends ConsumerState<LiveStreamScreen>
               else
                 const Center(
                   child: CircularProgressIndicator(color: Colors.white),
+                ),
+
+              // Beautiful "Live is Paused" overlay
+              if (showPauseOverlay)
+                Positioned.fill(
+                  child: Container(
+                    color: Colors.black87,
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(24),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.08),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white.withOpacity(0.15)),
+                            ),
+                            child: const Icon(
+                              Icons.pause_rounded,
+                              size: 48,
+                              color: Colors.amber,
+                            ),
+                          )
+                              .animate(onPlay: (controller) => controller.repeat(reverse: true))
+                              .scale(begin: const Offset(0.9, 0.9), end: const Offset(1.1, 1.1), duration: 1000.ms, curve: Curves.easeInOut),
+                          const SizedBox(height: 24),
+                          Text(
+                            'Live Stream Paused',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              shadows: [
+                                Shadow(
+                                  blurRadius: 10.0,
+                                  color: Colors.black.withOpacity(0.5),
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'The host is temporarily away. Stay tuned!',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
 
               // Gesture Detector for Screen Likes (tap on the video area only)
@@ -986,30 +1124,53 @@ class _LiveStreamScreenState extends ConsumerState<LiveStreamScreen>
                                     ),
                                   ],
                                 ),
-                                const SizedBox(width: 8),
-                                // Follow / Following toggle button
-                                GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      _isFollowing = !_isFollowing;
-                                    });
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: _isFollowing ? Colors.white24 : Colors.redAccent,
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      _isFollowing ? 'Following' : 'Follow',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
+                                if (user?.id != streamDetail.sellerId) ...[
+                                  const SizedBox(width: 8),
+                                  // Follow / Following toggle button
+                                  GestureDetector(
+                                    onTap: () async {
+                                      final wasFollowing = isFollowing;
+                                      try {
+                                        await ref.read(followedSellersProvider.notifier).toggleFollow(streamDetail.sellerId);
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text(wasFollowing 
+                                                ? 'Unfollowed seller successfully' 
+                                                : 'You are now following this seller'
+                                              ),
+                                              backgroundColor: AppColors.success,
+                                            ),
+                                          );
+                                        }
+                                      } catch (e) {
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('Failed: $e'),
+                                              backgroundColor: AppColors.error,
+                                            ),
+                                          );
+                                        }
+                                      }
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: isFollowing ? Colors.white24 : Colors.redAccent,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        isFollowing ? 'Following' : 'Follow',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
+                                ],
                               ],
                             ),
                           ),
@@ -1113,10 +1274,12 @@ class _LiveStreamScreenState extends ConsumerState<LiveStreamScreen>
                         end: Alignment.bottomCenter,
                       ),
                     ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+                    child: SafeArea(
+                      top: false,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                         // Showcase Product Card (if linked)
                         if (streamDetail.productId != null && streamDetail.productId!.isNotEmpty) ...[
                           _ProductShowcaseCard(productId: streamDetail.productId!)
@@ -1327,6 +1490,7 @@ class _LiveStreamScreenState extends ConsumerState<LiveStreamScreen>
                   ),
                 ),
               ),
+            ),
             ],
           );
         },

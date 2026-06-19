@@ -15,7 +15,6 @@ class LiveListScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final liveStreams = ref.watch(liveStreamsProvider);
-    final upcoming   = ref.watch(upcomingStreamsProvider);
     final user       = ref.watch(authNotifierProvider).valueOrNull;
     final unreadCount = user != null ? ref.watch(unreadCountProvider(user.id)) : 0;
 
@@ -109,49 +108,11 @@ class LiveListScreen extends ConsumerWidget {
                     ),
                   )
                 : SliverPadding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    sliver: SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (ctx, i) => _StreamCard(
-                            stream: list[i], isLive: true, index: i),
-                        childCount: list.length,
-                      ),
-                    ),
-                  ),
-          ),
-
-          // ── Upcoming ────────────────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
-              child: Text('Upcoming',
-                  style: Theme.of(context).textTheme.headlineSmall),
-            ),
-          ),
-
-          upcoming.when(
-            loading: () => const SliverToBoxAdapter(
-              child: Center(child: CircularProgressIndicator()),
-            ),
-            error: (e, _) =>
-                SliverToBoxAdapter(child: Center(child: Text(e.toString()))),
-            data: (list) => list.isEmpty
-                ? SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text('No upcoming streams',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.copyWith(color: AppColors.textSecond)),
-                    ),
-                  )
-                : SliverPadding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
                     sliver: SliverList(
                       delegate: SliverChildBuilderDelegate(
                         (ctx, i) => _StreamCard(
-                            stream: list[i], isLive: false, index: i),
+                            stream: list[i], isLive: true, index: i),
                         childCount: list.length,
                       ),
                     ),

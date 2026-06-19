@@ -299,8 +299,31 @@ class SellerProfileScreen extends ConsumerWidget {
                               _buildButton(
                                 isFollowing ? 'Following' : 'Follow', 
                                 isFollowing ? Icons.check : Icons.person_add_alt_1, 
-                                () {
-                                  ref.read(followedSellersProvider.notifier).toggleFollow(sellerId);
+                                () async {
+                                  final wasFollowing = isFollowing;
+                                  try {
+                                    await ref.read(followedSellersProvider.notifier).toggleFollow(sellerId);
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(wasFollowing 
+                                            ? 'Unfollowed seller successfully' 
+                                            : 'You are now following this seller'
+                                          ),
+                                          backgroundColor: AppColors.success,
+                                        ),
+                                      );
+                                    }
+                                  } catch (e) {
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text('Failed: $e'),
+                                          backgroundColor: AppColors.error,
+                                        ),
+                                      );
+                                    }
+                                  }
                                 }
                               ),
                             ]

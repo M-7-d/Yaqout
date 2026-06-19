@@ -22,8 +22,6 @@ abstract class StreamRepository {
 
   Stream<List<LiveStreamEntity>> watchLiveStreams();
 
-  Future<List<LiveStreamEntity>> getUpcomingStreams();
-
   Future<LiveStreamEntity> getStreamById(String id);
 
   Stream<LiveStreamEntity> watchStreamById(String id);

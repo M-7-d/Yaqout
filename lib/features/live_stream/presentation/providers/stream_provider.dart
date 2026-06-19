@@ -29,11 +29,6 @@ final liveStreamsProvider = StreamProvider<List<LiveStreamEntity>>((ref) {
   
   return repo.watchLiveStreams();
 });
-
-final upcomingStreamsProvider = FutureProvider<List<LiveStreamEntity>>((ref) {
-  return ref.read(streamRepositoryProvider).getUpcomingStreams();
-});
-
 final singleLiveStreamProvider = StreamProvider.family<LiveStreamEntity, String>((ref, id) {
   return ref.read(streamRepositoryProvider).watchStreamById(id);
 });

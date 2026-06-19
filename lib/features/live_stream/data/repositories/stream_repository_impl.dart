@@ -146,19 +146,6 @@ class StreamRepositoryImpl implements StreamRepository {
   }
 
   @override
-  Future<List<LiveStreamEntity>> getUpcomingStreams() async {
-    final data = await _client
-        .from('live_streams')
-        .select('*, profiles(*)')
-        .eq('status', 'scheduled')
-        .gt('scheduled_at', DateTime.now().toIso8601String())
-        .order('scheduled_at');
-    return (data as List)
-        .map((e) => LiveStreamModel.fromJson(e as Map<String, dynamic>).toEntity())
-        .toList();
-  }
-
-  @override
   Future<LiveStreamEntity> getStreamById(String id) async {
     final data = await _client
         .from('live_streams')
