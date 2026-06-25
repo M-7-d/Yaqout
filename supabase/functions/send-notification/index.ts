@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 serve(async (req) => {
-  const { title, body, userIds } = await req.json();
+  const { title, body, userIds, data } = await req.json();
 
   const ONESIGNAL_APP_ID = Deno.env.get('ONESIGNAL_APP_ID');
   const ONESIGNAL_REST_API_KEY = Deno.env.get('ONESIGNAL_REST_API_KEY');
@@ -20,6 +20,7 @@ serve(async (req) => {
       target_channel: "push",
       headings: { "en": title },
       contents: { "en": body },
+      data,
     }),
   });
 

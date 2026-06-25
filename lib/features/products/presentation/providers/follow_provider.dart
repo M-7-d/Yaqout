@@ -1,21 +1,21 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../shared/providers/shared_providers.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../../core/storage/hive_storage_service.dart';
 
 class FollowedSellersNotifier extends StateNotifier<List<String>> {
-  final SharedPreferences _prefs;
+  final HiveStorageService _hiveStorage;
   final SupabaseClient _supabase;
   final String _key;
 
-  FollowedSellersNotifier(this._prefs, this._supabase)
+  FollowedSellersNotifier(this._hiveStorage, this._supabase)
       : _key = _supabase.auth.currentUser?.id != null
             ? 'followed_sellers_${_supabase.auth.currentUser!.id}'
             : 'followed_sellers_anonymous',
         super([]) {
     if (_supabase.auth.currentUser?.id != null) {
-      state = _prefs.getStringList(_key) ?? [];
+      state = _hiveStorage.getSetting(_key, defaultValue: <String>[]) as List<String>;
       _syncFromSupabase();
     }
   }
@@ -35,9 +35,9 @@ class FollowedSellersNotifier extends StateNotifier<List<String>> {
           (data as List).map((e) => e['seller_id'] as String).toList();
 
       state = remoteIds;
-      await _prefs.setStringList(_key, remoteIds);
+      await _hiveStorage.setSetting(_key, remoteIds);
     } catch (_) {
-      // Fail silently — local state is already loaded from prefs
+      // Fail silently — local state is already loaded from hive
     }
   }
 
@@ -58,7 +58,7 @@ class FollowedSellersNotifier extends StateNotifier<List<String>> {
         state = [...state, sellerId];
       }
     }
-    await _prefs.setStringList(_key, state);
+    await _hiveStorage.setSetting(_key, state);
 
     try {
       if (isFollowing) {
@@ -76,7 +76,7 @@ class FollowedSellersNotifier extends StateNotifier<List<String>> {
     } catch (e) {
       // Revert state on error
       state = previousState;
-      await _prefs.setStringList(_key, state);
+      await _hiveStorage.setSetting(_key, state);
       rethrow;
     }
   }
@@ -84,12 +84,12 @@ class FollowedSellersNotifier extends StateNotifier<List<String>> {
 
 final followedSellersProvider =
     StateNotifierProvider<FollowedSellersNotifier, List<String>>((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
+  final hiveStorage = ref.watch(hiveStorageProvider);
   final supabase = ref.watch(supabaseClientProvider);
-  
+
   // Watch auth state changes so this provider is recreated
   // when a different user logs in/out.
   ref.watch(authNotifierProvider);
 
-  return FollowedSellersNotifier(prefs, supabase);
+  return FollowedSellersNotifier(hiveStorage, supabase);
 });

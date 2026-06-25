@@ -1,5 +1,3 @@
-import 'dart:async';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/repositories/chat_repository_impl.dart';
 import '../../domain/entities/chat_entities.dart';
@@ -10,31 +8,11 @@ final chatRepositoryProvider = Provider<ChatRepository>((ref) {
   return ChatRepositoryImpl(ref.read(supabaseClientProvider));
 });
 
-final chatRefreshProvider = StreamProvider.family<void, String>((ref, userId) {
-  final client = ref.read(supabaseClientProvider);
-  final controller = StreamController<void>();
-
-  final channel = client.channel('public:messages:$userId').onPostgresChanges(
-    event: PostgresChangeEvent.all,
-    schema: 'public',
-    table: 'messages',
-    callback: (payload) {
-      controller.add(null);
-    },
-  ).subscribe();
-
-  ref.onDispose(() {
-    client.removeChannel(channel);
-    controller.close();
-  });
-
-  return controller.stream;
-});
+// Removed chatRefreshProvider - room-specific streams are already handled
+// by the repository's watchMessages() method which uses .stream() with room_id filter
 
 final userRoomsProvider =
     FutureProvider.family<List<ChatRoomEntity>, String>((ref, userId) async {
-  // Listen for realtime message changes to refresh the room list automatically
-  ref.watch(chatRefreshProvider(userId));
   return ref.read(chatRepositoryProvider).getUserRooms(userId);
 });
 

@@ -63,7 +63,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 leading: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: AppColors.primaryLight.withOpacity(0.2),
+                    color: AppColors.primaryLight.withValues(alpha: 0.2),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.photo_library_outlined, color: AppColors.primary),
@@ -79,7 +79,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 leading: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: AppColors.primaryLight.withOpacity(0.2),
+                    color: AppColors.primaryLight.withValues(alpha: 0.2),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.camera_alt_outlined, color: AppColors.primary),
@@ -154,6 +154,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                                     imageUrl: user.avatarUrl!,
                                     width: 120,
                                     height: 120,
+                                    memCacheWidth: 240,
+                                    memCacheHeight: 240,
                                     fit: BoxFit.cover,
                                     placeholder: (_, __) => const CircularProgressIndicator(strokeWidth: 2),
                                     errorWidget: (_, __, ___) => const Icon(Icons.person, size: 60, color: AppColors.primary),

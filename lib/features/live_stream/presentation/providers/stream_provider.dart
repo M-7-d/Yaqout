@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../data/repositories/stream_repository_impl.dart';
 import '../../domain/entities/live_stream_entity.dart';
 import '../../domain/entities/live_stream_message_entity.dart';
@@ -33,8 +34,38 @@ final singleLiveStreamProvider = StreamProvider.family<LiveStreamEntity, String>
   return ref.read(streamRepositoryProvider).watchStreamById(id);
 });
 
-final liveStreamMessagesProvider = StreamProvider.family<List<LiveStreamMessageEntity>, String>((ref, streamId) {
-  return ref.read(streamRepositoryProvider).watchMessages(streamId);
+class LiveStreamMessagesNotifier extends StateNotifier<List<LiveStreamMessageEntity>> {
+  final StreamRepository _repository;
+  final String _streamId;
+  StreamSubscription<List<LiveStreamMessageEntity>>? _subscription;
+
+  LiveStreamMessagesNotifier(this._repository, this._streamId) : super([]) {
+    _subscribe();
+  }
+
+  void _subscribe() {
+    _subscription = _repository.watchMessages(_streamId).listen((newMessages) {
+      if (state.isEmpty) {
+        state = newMessages;
+      } else {
+        final existingIds = state.map((m) => m.id).toSet();
+        final newItems = newMessages.where((m) => !existingIds.contains(m.id)).toList();
+        if (newItems.isNotEmpty) {
+          state = [...state, ...newItems];
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
+  }
+}
+
+final liveStreamMessagesProvider = StateNotifierProvider.family<LiveStreamMessagesNotifier, List<LiveStreamMessageEntity>, String>((ref, streamId) {
+  return LiveStreamMessagesNotifier(ref.read(streamRepositoryProvider), streamId);
 });
 
 final userBlockStreamProvider = StreamProvider.family<bool, ({String streamId, String userId})>((ref, arg) {
@@ -48,6 +79,7 @@ class AgoraState {
   final bool isCameraOff;
   final List<int> remoteUids;
   final String? error;
+  final bool isFrontCamera;
 
   const AgoraState({
     this.isJoined    = false,
@@ -55,6 +87,7 @@ class AgoraState {
     this.isCameraOff = false,
     this.remoteUids  = const [],
     this.error,
+    this.isFrontCamera = true,
   });
 
   AgoraState copyWith({
@@ -63,6 +96,7 @@ class AgoraState {
     bool?        isCameraOff,
     List<int>?   remoteUids,
     String?      error,
+    bool?        isFrontCamera,
   }) =>
       AgoraState(
         isJoined:    isJoined    ?? this.isJoined,
@@ -70,6 +104,7 @@ class AgoraState {
         isCameraOff: isCameraOff ?? this.isCameraOff,
         remoteUids:  remoteUids  ?? this.remoteUids,
         error:       error,
+        isFrontCamera: isFrontCamera ?? this.isFrontCamera,
       );
 }
 
@@ -103,14 +138,16 @@ class AgoraNotifier extends StateNotifier<AgoraState> {
       _engine!.registerEventHandler(RtcEngineEventHandler(
         onJoinChannelSuccess: (_, __) {
           state = state.copyWith(isJoined: true);
+          // Keep the screen awake while the user is in a live stream.
+          // Do it for BOTH host and viewers.
+          WakelockPlus.enable();
           if (isHost) {
             _streamRepo.updateStreamStatus(streamId, 'live');
             // Start heartbeat: server will auto-end the stream if
             // heartbeat stops (e.g. app killed).
             _startHeartbeat(streamId);
-          } else {
-            _streamRepo.incrementViewerCount(streamId);
           }
+          // Note: Viewer count is now managed by Realtime Presence
         },
         onUserJoined: (_, uid, __) {
           state = state.copyWith(remoteUids: [...state.remoteUids, uid]);
@@ -157,6 +194,12 @@ class AgoraNotifier extends StateNotifier<AgoraState> {
         await _engine!.startPreview();
         // Switch to back camera as default
         await _engine!.switchCamera();
+        state = state.copyWith(isFrontCamera: false);
+        // Explicitly set local render mode to disable mirroring for the default back camera
+        await _engine!.setLocalRenderMode(
+          renderMode: RenderModeType.renderModeHidden,
+          mirrorMode: VideoMirrorModeType.videoMirrorModeDisabled,
+        );
       }
 
       await _engine!.joinChannel(
@@ -194,17 +237,32 @@ class AgoraNotifier extends StateNotifier<AgoraState> {
   Future<void> toggleSwitchCamera() async {
     if (state.isCameraOff) return;
     await _engine?.switchCamera();
+    final isFront = !state.isFrontCamera;
+    state = state.copyWith(isFrontCamera: isFront);
+    await _engine?.setLocalRenderMode(
+      renderMode: RenderModeType.renderModeHidden,
+      mirrorMode: isFront
+          ? VideoMirrorModeType.videoMirrorModeEnabled
+          : VideoMirrorModeType.videoMirrorModeDisabled,
+    );
   }
 
   Future<void> leave(String streamId, {required bool isHost}) async {
     _stopHeartbeat();
+    // Fire the status update first, before any native engine delays
+    final updateTask = isHost 
+        ? _streamRepo.updateStreamStatus(streamId, 'ended')
+        : Future.value();
+
+    try {
+      await updateTask.timeout(const Duration(seconds: 2));
+    } catch (_) {}
+
     await _engine?.leaveChannel();
     await _engine?.release();
-    if (isHost) {
-      await _streamRepo.updateStreamStatus(streamId, 'ended');
-    } else {
-      await _streamRepo.decrementViewerCount(streamId);
-    }
+    // Allow the device to sleep again after leaving the live stream
+    WakelockPlus.disable();
+    
     state = const AgoraState();
     _engine = null;
   }
@@ -225,6 +283,14 @@ class AgoraNotifier extends StateNotifier<AgoraState> {
   void _stopHeartbeat() {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
+  }
+
+  @override
+  void dispose() {
+    _stopHeartbeat();
+    _engine?.release();
+    WakelockPlus.disable();
+    super.dispose();
   }
 
   RtcEngine? get engine => _engine;

@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../domain/entities/product_entity.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../providers/product_provider.dart';
@@ -8,7 +10,19 @@ import 'product_card.dart';
 import 'product_list_widgets.dart';
 
 class ProductSearchDelegate extends SearchDelegate {
-  ProductSearchDelegate();
+  ProductSearchDelegate() : super();
+
+  Timer? _debounceTimer;
+  String _debouncedQuery = '';
+
+  @override
+  set query(String value) {
+    super.query = value;
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 500), () {
+      _debouncedQuery = value.trim();
+    });
+  }
 
   @override
   ThemeData appBarTheme(BuildContext context) {
@@ -48,17 +62,17 @@ class ProductSearchDelegate extends SearchDelegate {
 
   @override
   Widget buildResults(BuildContext context) {
-    if (query.trim().isEmpty) {
+    if (_debouncedQuery.isEmpty) {
       return const Center(child: Text('Search for products...'));
     }
 
     return Consumer(
       builder: (context, ref, _) {
-        final results = ref.watch(productsProvider(ProductFilter(query: query.trim())));
+        final results = ref.watch(productsProvider(ProductFilter(query: _debouncedQuery)));
         return results.when(
           data: (list) => list.isEmpty
               ? ProductEmptyState(
-                  message: 'No results found for "$query"',
+                  message: 'No results found for "$_debouncedQuery"',
                   icon: Icons.search_off_rounded,
                 )
               : GridView.builder(
@@ -81,14 +95,14 @@ class ProductSearchDelegate extends SearchDelegate {
 
   @override
   Widget buildSuggestions(BuildContext context) {
-    if (query.trim().isEmpty) {
+    if (_debouncedQuery.isEmpty) {
       return Container(color: AppColors.surface);
     }
 
     return Consumer(
       builder: (context, ref, _) {
         // Show live results as suggestions
-        final results = ref.watch(productsProvider(ProductFilter(query: query.trim())));
+        final results = ref.watch(productsProvider(ProductFilter(query: _debouncedQuery)));
         return results.when(
           data: (list) => list.isEmpty
               ? const SizedBox.shrink()
@@ -101,7 +115,20 @@ class ProductSearchDelegate extends SearchDelegate {
                       leading: p.primaryImage.isNotEmpty
                           ? ClipRRect(
                               borderRadius: BorderRadius.circular(4),
-                              child: Image.network(p.primaryImage, width: 40, height: 40, fit: BoxFit.cover),
+                              child: CachedNetworkImage(
+                                imageUrl: p.primaryImage,
+                                width: 40,
+                                height: 40,
+                                memCacheWidth: 80,
+                                memCacheHeight: 80,
+                                fit: BoxFit.cover,
+                                placeholder: (_, __) => const SizedBox(
+                                  width: 40,
+                                  height: 40,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                ),
+                                errorWidget: (_, __, ___) => const Icon(Icons.image_outlined, size: 20),
+                              ),
                             )
                           : const Icon(Icons.image_outlined),
                       title: Text(p.title),
@@ -118,5 +145,11 @@ class ProductSearchDelegate extends SearchDelegate {
         );
       },
     );
+  }
+
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    super.dispose();
   }
 }

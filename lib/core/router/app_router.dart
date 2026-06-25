@@ -28,6 +28,7 @@ import '../../features/settings/presentation/screens/blocked_list_screen.dart';
 import '../../features/settings/presentation/screens/become_seller_screen.dart';
 import '../../features/settings/presentation/screens/about_us_screen.dart';
 import '../../features/settings/presentation/screens/report_bug_screen.dart';
+import '../../features/settings/presentation/screens/terms_conditions_screen.dart';
 import '../../shared/widgets/main_shell.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -67,19 +68,22 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/auth/forgot-password',
-        pageBuilder: (_, __) => _slide(const ForgotPasswordScreen()),
+        pageBuilder: (_, s) => _slide(const ForgotPasswordScreen()),
         routes: [
-          GoRoute(
-            path: 'verify',
-            pageBuilder: (_, state) => _slide(
-              VerifyCodeScreen(email: state.uri.queryParameters['email'] ?? ''),
-            ),
-          ),
           GoRoute(
             path: 'reset',
             pageBuilder: (_, __) => _slide(const ResetPasswordScreen()),
           ),
         ],
+      ),
+      GoRoute(
+        path: '/auth/verify',
+        pageBuilder: (_, state) => _slide(
+          VerifyCodeScreen(
+            email: state.uri.queryParameters['email'] ?? '',
+            isSignUp: state.uri.queryParameters['type'] == 'signup',
+          ),
+        ),
       ),
 
       // ── Main shell with bottom nav ─────────────────────────────────────────
@@ -191,6 +195,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/settings/report-bug',
         pageBuilder: (_, __) => _slide(const ReportBugScreen()),
+      ),
+      GoRoute(
+        path: '/settings/terms',
+        pageBuilder: (_, __) => _slide(const TermsConditionsScreen()),
       ),
       GoRoute(
         path: '/settings/manage-products',

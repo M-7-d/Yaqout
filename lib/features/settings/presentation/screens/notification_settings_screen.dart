@@ -32,18 +32,7 @@ class NotificationSettingsScreen extends ConsumerWidget {
             value: settings['live_stream_notifications'] ?? true,
             onChanged: (v) => notifier.setBool('live_stream_notifications', v),
           ),
-          _buildSwitchTile(
-            title: 'New Followers',
-            subtitle: 'When someone starts following you',
-            value: settings['new_followers'] ?? true,
-            onChanged: (v) => notifier.setBool('new_followers', v),
-          ),
-          _buildSwitchTile(
-            title: 'Likes & Comments',
-            subtitle: 'Activity on your products and posts',
-            value: settings['likes_comments'] ?? true,
-            onChanged: (v) => notifier.setBool('likes_comments', v),
-          ),
+
           _buildSwitchTile(
             title: 'Ratings & Reviews',
             subtitle: 'When someone rates or reviews your product',

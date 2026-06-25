@@ -9,7 +9,12 @@ import '../../../../shared/widgets/curved_background.dart';
 
 class VerifyCodeScreen extends ConsumerStatefulWidget {
   final String email;
-  const VerifyCodeScreen({super.key, required this.email});
+  final bool isSignUp;
+  const VerifyCodeScreen({
+    super.key,
+    required this.email,
+    this.isSignUp = false,
+  });
 
   @override
   ConsumerState<VerifyCodeScreen> createState() => _VerifyCodeScreenState();
@@ -31,13 +36,18 @@ class _VerifyCodeScreenState extends ConsumerState<VerifyCodeScreen> {
     
     setState(() => _isLoading = true);
     try {
-      await ref.read(authNotifierProvider.notifier).verifyCode(
-        widget.email,
-        _codeCtrl.text.trim(),
+      await ref.read(authNotifierProvider.notifier).verifyOTP(
+        email: widget.email,
+        code: _codeCtrl.text.trim(),
+        type: widget.isSignUp ? 'signup' : 'recovery',
       );
       if (!mounted) return;
       
-      context.go('/auth/forgot-password/reset');
+      if (widget.isSignUp) {
+        context.go('/home');
+      } else {
+        context.go('/auth/forgot-password/reset');
+      }
       
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Code verified successfully')),
@@ -88,13 +98,16 @@ class _VerifyCodeScreenState extends ConsumerState<VerifyCodeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 24),
-                    Text('Verify Code 🛡️',
+                    Text(widget.isSignUp ? 'Verify Email ✉️' : 'Verify Code 🛡️',
                             style: Theme.of(context).textTheme.displaySmall)
                         .animate()
                         .fadeIn(delay: 600.ms)
                         .slideX(begin: -0.1),
                     const SizedBox(height: 8),
-                    Text('Enter the 6-digit code sent to ${widget.email}',
+                    Text(
+                        widget.isSignUp
+                            ? 'Enter the 6-digit verification code sent to ${widget.email}'
+                            : 'Enter the 6-digit code sent to ${widget.email}',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: AppColors.textSecond,
                             )).animate().fadeIn(delay: 700.ms),
@@ -106,10 +119,10 @@ class _VerifyCodeScreenState extends ConsumerState<VerifyCodeScreen> {
                       keyboardType: TextInputType.number,
                       textAlign: TextAlign.center,
                       style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 8),
-                      decoration: const InputDecoration(
-                        labelText: 'Reset Code',
+                      decoration: InputDecoration(
+                        labelText: widget.isSignUp ? 'Verification Code' : 'Reset Code',
                         hintText: '000000',
-                        prefixIcon: Icon(Icons.security),
+                        prefixIcon: const Icon(Icons.security),
                       ),
                       validator: (v) =>
                           v == null || v.length != 6 ? 'Enter the 6-digit code' : null,
@@ -137,7 +150,11 @@ class _VerifyCodeScreenState extends ConsumerState<VerifyCodeScreen> {
                         onPressed: _isLoading ? null : () async {
                           setState(() => _isLoading = true);
                           try {
-                            await ref.read(authNotifierProvider.notifier).sendPasswordReset(widget.email);
+                            if (widget.isSignUp) {
+                              await ref.read(authNotifierProvider.notifier).resendOTP(email: widget.email, type: 'signup');
+                            } else {
+                              await ref.read(authNotifierProvider.notifier).sendPasswordReset(widget.email);
+                            }
                             if (!mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(content: Text('New code sent')),

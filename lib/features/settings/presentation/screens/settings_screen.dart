@@ -11,7 +11,11 @@ class SettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(authNotifierProvider).valueOrNull;
+    final fullName = ref.watch(authNotifierProvider.select((u) => u.valueOrNull?.fullName));
+    final email = ref.watch(authNotifierProvider.select((u) => u.valueOrNull?.email));
+    final avatarUrl = ref.watch(authNotifierProvider.select((u) => u.valueOrNull?.avatarUrl));
+    final isSeller = ref.watch(authNotifierProvider.select((u) => u.valueOrNull?.isSeller ?? false));
+    final userId = ref.watch(authNotifierProvider.select((u) => u.valueOrNull?.id));
 
     return Scaffold(
       appBar: AppBar(
@@ -37,16 +41,18 @@ class SettingsScreen extends ConsumerWidget {
                   CircleAvatar(
                     radius: 30,
                     backgroundColor: AppColors.primary,
-                    child: (user?.avatarUrl != null && user!.avatarUrl!.isNotEmpty)
+                    child: (avatarUrl != null && avatarUrl!.isNotEmpty)
                         ? ClipOval(
                             child: CachedNetworkImage(
-                              imageUrl: user.avatarUrl!,
+                              imageUrl: avatarUrl!,
                               width: 60,
                               height: 60,
+                              memCacheWidth: 120,
+                              memCacheHeight: 120,
                               fit: BoxFit.cover,
                               placeholder: (_, __) => const CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                               errorWidget: (_, __, ___) => Text(
-                                user.fullName?.substring(0, 1).toUpperCase() ?? 'U',
+                                fullName?.substring(0, 1).toUpperCase() ?? 'U',
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 24,
@@ -56,7 +62,7 @@ class SettingsScreen extends ConsumerWidget {
                             ),
                           )
                         : Text(
-                            user?.fullName?.substring(0, 1).toUpperCase() ?? 'U',
+                            fullName?.substring(0, 1).toUpperCase() ?? 'U',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 24,
@@ -70,11 +76,11 @@ class SettingsScreen extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          user?.fullName ?? 'User Name',
+                          fullName ?? 'User Name',
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
                         Text(
-                          user?.email ?? 'email@example.com',
+                          email ?? 'email@example.com',
                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                 color: AppColors.textSecond,
                               ),
@@ -93,13 +99,13 @@ class SettingsScreen extends ConsumerWidget {
 
           const SizedBox(height: 24),
 
-          if (user?.isSeller == true) ...[
+          if (isSeller) ...[
             _buildSectionHeader(context, 'My Shop'),
             _buildSettingTile(
               context,
               icon: Icons.storefront_outlined,
               title: 'View My Shop',
-              onTap: () => context.push('/sellers/${user!.id}'),
+              onTap: () => context.push('/sellers/$userId'),
             ),
             _buildSettingTile(
               context,
@@ -139,10 +145,16 @@ class SettingsScreen extends ConsumerWidget {
           ),
           _buildSettingTile(
             context,
+            icon: Icons.block_rounded,
+            title: 'Block List',
+            onTap: () => context.push('/settings/blocked'),
+          ),
+          _buildSettingTile(
+            context,
             icon: Icons.delete_outline_rounded,
             title: 'Delete Account',
             titleColor: AppColors.error,
-            onTap: () => _showDeleteAccountConfirmation(context),
+            onTap: () => _showDeleteAccountConfirmation(context, ref),
           ),
           const SizedBox(height: 24),
 
@@ -170,9 +182,7 @@ class SettingsScreen extends ConsumerWidget {
             context,
             icon: Icons.description_outlined,
             title: 'Terms & Conditions',
-            onTap: () {
-              // Usually open a URL
-            },
+            onTap: () => context.push('/settings/terms'),
           ),
           const SizedBox(height: 16),
           const Center(
@@ -208,7 +218,7 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  void _showDeleteAccountConfirmation(BuildContext context) {
+  void _showDeleteAccountConfirmation(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -222,9 +232,17 @@ class SettingsScreen extends ConsumerWidget {
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
-              // Delete logic
+            onPressed: () async {
               Navigator.pop(context);
+              try {
+                await ref.read(authNotifierProvider.notifier).deleteAccount();
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to delete account: $e')),
+                  );
+                }
+              }
             },
             child: const Text(
               'Delete',

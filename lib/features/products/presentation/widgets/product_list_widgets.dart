@@ -30,7 +30,7 @@ class ProductEmptyState extends StatelessWidget {
                 color: AppColors.primaryLight,
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, size: 64, color: AppColors.primary.withOpacity(0.5)),
+              child: Icon(icon, size: 64, color: AppColors.primary.withValues(alpha: 0.5)),
             ).animate().scale(delay: 200.ms, curve: Curves.easeOutBack),
             const SizedBox(height: 24),
             Text(
@@ -103,6 +103,6 @@ class ProductGridShimmer extends StatelessWidget {
           ],
         ),
       ),
-    ).animate(onPlay: (c) => c.repeat()).shimmer(duration: 1200.ms, color: Colors.white.withOpacity(0.4));
+    ).animate(onPlay: (c) => c.repeat()).shimmer(duration: 1200.ms, color: Colors.white.withValues(alpha: 0.4));
   }
 }

@@ -33,6 +33,8 @@ class ProductCard extends StatelessWidget {
                   child: product.primaryImage.isNotEmpty
                       ? CachedNetworkImage(
                           imageUrl: product.primaryImage,
+                          memCacheWidth: 500,
+                          memCacheHeight: 500,
                           errorListener: (_) {},
                           fit: BoxFit.cover,
                           width: double.infinity,

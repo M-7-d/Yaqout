@@ -20,8 +20,8 @@ class SellerProfileScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sellerAsync = ref.watch(userByIdProvider(sellerId));
     final productsAsync = ref.watch(sellerProductsProvider(sellerId));
-    final currentUser = ref.watch(authNotifierProvider).valueOrNull;
-    final isOwnProfile = currentUser?.id == sellerId;
+    final currentUserId = ref.watch(authNotifierProvider.select((u) => u.valueOrNull?.id));
+    final isOwnProfile = currentUserId == sellerId;
     final followedSellers = ref.watch(followedSellersProvider);
     final isFollowing = followedSellers.contains(sellerId);
 
@@ -106,7 +106,7 @@ class SellerProfileScreen extends ConsumerWidget {
                                 shape: BoxShape.circle,
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(0.1),
+                                    color: Colors.black.withValues(alpha: 0.1),
                                     blurRadius: 16,
                                     spreadRadius: 2,
                                     offset: const Offset(0, 4),
@@ -122,6 +122,8 @@ class SellerProfileScreen extends ConsumerWidget {
                                           imageUrl: seller.avatarUrl!,
                                           width: 140,
                                           height: 140,
+                                          memCacheWidth: 280,
+                                          memCacheHeight: 280,
                                           fit: BoxFit.cover,
                                           errorWidget: (_, __, ___) => _buildInitials(seller.fullName),
                                         ),
@@ -180,10 +182,10 @@ class SellerProfileScreen extends ConsumerWidget {
                               decoration: BoxDecoration(
                                 color: AppColors.card,
                                 borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: AppColors.border.withOpacity(0.5)),
+                                border: Border.all(color: AppColors.border.withValues(alpha: 0.5)),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(0.02),
+                                    color: Colors.black.withValues(alpha: 0.02),
                                     blurRadius: 10,
                                     offset: const Offset(0, 4),
                                   ),
@@ -244,10 +246,10 @@ class SellerProfileScreen extends ConsumerWidget {
                               margin: const EdgeInsets.symmetric(horizontal: 24),
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(24),
-                                border: Border.all(color: Colors.white.withOpacity(0.2), width: 1.5),
+                                border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1.5),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: AppColors.primaryDark.withOpacity(0.06),
+                                    color: AppColors.primaryDark.withValues(alpha: 0.06),
                                     blurRadius: 24,
                                     offset: const Offset(0, 8),
                                   ),
@@ -260,15 +262,15 @@ class SellerProfileScreen extends ConsumerWidget {
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(vertical: 20),
                                     decoration: BoxDecoration(
-                                      color: AppColors.surface.withOpacity(0.6),
+                                      color: AppColors.surface.withValues(alpha: 0.6),
                                     ),
                                     child: Row(
                                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                                       children: [
                                         _buildStatColumn(formattedFollowers, 'Followers'),
-                                        Container(height: 40, width: 1.5, color: AppColors.primaryLight.withOpacity(0.3)),
+                                        Container(height: 40, width: 1.5, color: AppColors.primaryLight.withValues(alpha: 0.3)),
                                         _buildStatColumn('${products.length}', 'Products'),
-                                        Container(height: 40, width: 1.5, color: AppColors.primaryLight.withOpacity(0.3)),
+                                        Container(height: 40, width: 1.5, color: AppColors.primaryLight.withValues(alpha: 0.3)),
                                         _buildStatColumn(formattedRating, 'Rating', isRating: avgRating > 0),
                                       ],
                                     ),
@@ -352,7 +354,7 @@ class SellerProfileScreen extends ConsumerWidget {
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.primary.withOpacity(0.3),
+                          color: AppColors.primary.withValues(alpha: 0.3),
                           blurRadius: 8,
                           offset: const Offset(0, 3),
                         ),
@@ -460,7 +462,7 @@ class SellerProfileScreen extends ConsumerWidget {
         minimumSize: const Size(0, 48),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
-          side: isPrimary ? BorderSide.none : BorderSide(color: AppColors.border.withOpacity(0.6), width: 1.5),
+          side: isPrimary ? BorderSide.none : BorderSide(color: AppColors.border.withValues(alpha: 0.6), width: 1.5),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
       ),
@@ -503,13 +505,13 @@ class _ProductCard extends StatelessWidget {
           color: AppColors.card,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 12,
               spreadRadius: 2,
               offset: const Offset(0, 4),
             ),
           ],
-          border: Border.all(color: AppColors.border.withOpacity(0.5), width: 1),
+          border: Border.all(color: AppColors.border.withValues(alpha: 0.5), width: 1),
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
@@ -519,10 +521,12 @@ class _ProductCard extends StatelessWidget {
               Expanded(
                 child: Container(
                   width: double.infinity,
-                  color: AppColors.primaryLight.withOpacity(0.3),
+                  color: AppColors.primaryLight.withValues(alpha: 0.3),
                   child: product.images.isNotEmpty
                       ? CachedNetworkImage(
                           imageUrl: product.images.first,
+                          memCacheWidth: 500,
+                          memCacheHeight: 500,
                           errorListener: (_) {},
                           fit: BoxFit.cover,
                           placeholder: (_, __) => Container(color: AppColors.shimmerBase),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../providers/stream_provider.dart';
 import '../../domain/entities/live_stream_entity.dart';
@@ -15,8 +16,9 @@ class LiveListScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final liveStreams = ref.watch(liveStreamsProvider);
-    final user       = ref.watch(authNotifierProvider).valueOrNull;
-    final unreadCount = user != null ? ref.watch(unreadCountProvider(user.id)) : 0;
+    final userId      = ref.watch(authNotifierProvider.select((u) => u.valueOrNull?.id));
+    final isSeller    = ref.watch(authNotifierProvider.select((u) => u.valueOrNull?.isSeller ?? false));
+    final unreadCount = userId != null ? ref.watch(unreadCountProvider(userId)) : 0;
 
     return Scaffold(
       appBar: AppBar(
@@ -122,53 +124,55 @@ class LiveListScreen extends ConsumerWidget {
       ),
 
       // Go live FAB for sellers
-      floatingActionButton: user?.isSeller == true
+        floatingActionButton: isSeller
           ? FloatingActionButton.extended(
-              onPressed: () => _showGoLiveDialog(context, ref, user!.id),
-              backgroundColor: AppColors.error,
-              icon: const Icon(Icons.live_tv_rounded, color: Colors.white),
-              label: const Text('Go Live',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-            )
+            onPressed: () => _showGoLiveConfirm(context, ref, userId!),
+            backgroundColor: AppColors.error,
+            icon: const Icon(Icons.live_tv_rounded, color: Colors.white),
+            label: const Text('Go Live',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+          )
           : null,
     );
   }
 
-  Future<void> _showGoLiveDialog(
+  Future<void> _showGoLiveConfirm(
       BuildContext context, WidgetRef ref, String sellerId) async {
-    final titleCtrl = TextEditingController();
-    await showDialog(
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Start a Live Stream'),
-        content: TextField(
-          controller: titleCtrl,
-          decoration: const InputDecoration(labelText: 'Stream title'),
-        ),
+        title: const Text('Start Live Stream'),
+        content: const Text('You are about to go live. Do you want to start now?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx),
+            onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () async {
-              if (titleCtrl.text.trim().isEmpty) return;
-              Navigator.pop(ctx);
-              final stream = await ref
-                  .read(streamRepositoryProvider)
-                  .createStream(
-                    sellerId: sellerId,
-                    title:    titleCtrl.text.trim(),
-                  );
-              if (context.mounted) {
-                context.push('/live/${stream.id}');
-              }
-            },
+            onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Go Live'),
           ),
         ],
       ),
     );
+
+    if (confirmed != true) return;
+
+    try {
+      final stream = await ref
+          .read(streamRepositoryProvider)
+          .createStream(
+            sellerId: sellerId,
+            title: 'Live Stream',
+          );
+      if (context.mounted) context.push('/live/${stream.id}');
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to start stream: $e')),
+        );
+      }
+    }
   }
 }
 
@@ -209,10 +213,15 @@ class _StreamCard extends ConsumerWidget {
                 data: (user) => user?.avatarUrl != null && user!.avatarUrl!.isNotEmpty
                     ? ClipRRect(
                         borderRadius: BorderRadius.circular(12),
-                        child: Image.network(
-                          user.avatarUrl!,
+                        child: CachedNetworkImage(
+                          imageUrl: user.avatarUrl!,
+                          memCacheWidth: 144,
+                          memCacheHeight: 144,
                           fit: BoxFit.cover,
-                          errorBuilder: (c, e, s) => const Icon(
+                          placeholder: (_, __) => const Center(
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          ),
+                          errorWidget: (_, __, ___) => const Icon(
                               Icons.live_tv_rounded,
                               color: Colors.white,
                               size: 30),

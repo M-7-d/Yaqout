@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +9,18 @@ import '../theme/chat_theme.dart';
 class ChatSearchDelegate extends SearchDelegate {
   final String userId;
   ChatSearchDelegate(this.userId);
+
+  Timer? _debounceTimer;
+  String _debouncedQuery = '';
+
+  @override
+  set query(String value) {
+    super.query = value;
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 500), () {
+      _debouncedQuery = value.trim();
+    });
+  }
 
   @override
   ThemeData appBarTheme(BuildContext context) {
@@ -66,12 +79,12 @@ class ChatSearchDelegate extends SearchDelegate {
               final other = userId == room.buyerId
                   ? room.sellerName ?? 'Seller'
                   : room.buyerName ?? 'Buyer';
-              return other.toLowerCase().contains(query.toLowerCase().trim());
+              return other.toLowerCase().contains(_debouncedQuery.toLowerCase());
             }).toList();
 
-            if (filtered.isEmpty && query.isNotEmpty) {
+            if (filtered.isEmpty && _debouncedQuery.isNotEmpty) {
               return Center(
-                child: Text('No conversations found for "$query"',
+                child: Text('No conversations found for "$_debouncedQuery"',
                     style: const TextStyle(color: ChatTheme.metaText)),
               );
             }
@@ -101,6 +114,8 @@ class ChatSearchDelegate extends SearchDelegate {
                               imageUrl: room.otherUserAvatar!,
                               width: 52,
                               height: 52,
+                              memCacheWidth: 104,
+                              memCacheHeight: 104,
                               fit: BoxFit.cover,
                               placeholder: (_, __) => const CircularProgressIndicator(strokeWidth: 2),
                               errorWidget: (_, __, ___) => Text(
@@ -139,5 +154,11 @@ class ChatSearchDelegate extends SearchDelegate {
         );
       },
     );
+  }
+
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    super.dispose();
   }
 }

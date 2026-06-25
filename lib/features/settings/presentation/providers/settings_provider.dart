@@ -6,7 +6,7 @@ import '../../../../shared/providers/shared_providers.dart';
 import '../../../../core/services/notification_service.dart';
 
 final settingsRepositoryProvider = Provider<SettingsRepository>((ref) {
-  return SettingsRepositoryImpl(ref.read(sharedPreferencesProvider));
+  return SettingsRepositoryImpl(ref.read(hiveStorageProvider));
 });
 
 class SettingsNotifier extends StateNotifier<Map<String, dynamic>> {
@@ -23,8 +23,6 @@ class SettingsNotifier extends StateNotifier<Map<String, dynamic>> {
   static const _notifKeys = [
     'push_notifications',
     'live_stream_notifications',
-    'new_followers',
-    'likes_comments',
     'ratings_reviews',
     'messages_chat',
     'in_app_sounds',
@@ -36,8 +34,6 @@ class SettingsNotifier extends StateNotifier<Map<String, dynamic>> {
           _repo.getBool('push_notifications', defaultValue: true),
       'live_stream_notifications':
           _repo.getBool('live_stream_notifications', defaultValue: true),
-      'new_followers': _repo.getBool('new_followers', defaultValue: true),
-      'likes_comments': _repo.getBool('likes_comments', defaultValue: true),
       'ratings_reviews': _repo.getBool('ratings_reviews', defaultValue: true),
       'messages_chat': _repo.getBool('messages_chat', defaultValue: true),
       'in_app_sounds': _repo.getBool('in_app_sounds', defaultValue: true),
@@ -60,8 +56,6 @@ class SettingsNotifier extends StateNotifier<Map<String, dynamic>> {
     if (key == 'push_notifications') {
       _notificationService.setPushSubscriptionEnabled(value);
     } else if (key == 'live_stream_notifications' ||
-        key == 'new_followers' ||
-        key == 'likes_comments' ||
         key == 'ratings_reviews' ||
         key == 'messages_chat') {
       _notificationService.updateTag(key, value.toString());

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../../domain/entities/live_stream_entity.dart';
@@ -9,6 +10,8 @@ import '../../../../core/errors/exceptions.dart';
 
 class StreamRepositoryImpl implements StreamRepository {
   final SupabaseClient _client;
+  final Map<String, RealtimeChannel> _presenceChannels = {};
+  final Map<String, StreamController<int>> _viewerCountControllers = {};
   StreamRepositoryImpl(this._client);
 
   @override
@@ -197,5 +200,73 @@ class StreamRepositoryImpl implements StreamRepository {
           list.sort((a, b) => a.createdAt.compareTo(b.createdAt));
           return list;
         });
+  }
+
+  @override
+  void trackPresence(String streamId, Map<String, dynamic> presenceState) {
+    final channel = _presenceChannels.putIfAbsent(
+      streamId,
+      () => _client.channel('presence:$streamId'),
+    );
+    // Subscribe the channel
+    channel.subscribe((status, [error]) async {
+      if (status == RealtimeSubscribeStatus.subscribed) {
+        await channel.track(presenceState);
+      }
+    });
+  }
+
+  @override
+  Stream<int> watchViewerCount(String streamId) {
+    // Check if we already have a controller for this stream
+    if (_viewerCountControllers.containsKey(streamId)) {
+      return _viewerCountControllers[streamId]!.stream;
+    }
+
+    // Create a new stream controller
+    final controller = StreamController<int>.broadcast();
+    _viewerCountControllers[streamId] = controller;
+
+    // Get or create the presence channel
+    final channel = _presenceChannels.putIfAbsent(
+      streamId,
+      () => _client.channel('presence:$streamId'),
+    );
+
+    // Subscribe to presence events using callbacks
+    channel
+        .onPresenceSync((_) {
+          final state = channel.presenceState();
+          controller.add(state.length);
+        })
+        .onPresenceJoin((event) {
+          final state = channel.presenceState();
+          controller.add(state.length);
+        })
+        .onPresenceLeave((event) {
+          final state = channel.presenceState();
+          controller.add(state.length);
+        });
+
+    // Subscribe the channel
+    channel.subscribe();
+
+    return controller.stream;
+  }
+
+  @override
+  void untrackPresence(String streamId) {
+    final channel = _presenceChannels[streamId];
+    if (channel != null) {
+      channel.untrack();
+      channel.unsubscribe();
+      _presenceChannels.remove(streamId);
+    }
+
+    final controller = _viewerCountControllers[streamId];
+    if (controller != null) {
+      controller.close();
+      _viewerCountControllers.remove(streamId);
+    }
   }
 }

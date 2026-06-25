@@ -35,7 +35,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
       await ref.read(authNotifierProvider.notifier).sendPasswordReset(email);
       if (!mounted) return;
       
-      context.go('/auth/forgot-password/verify?email=$email');
+      context.go('/auth/verify?email=$email&type=recovery');
       
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Reset code sent to your email')),
@@ -97,7 +97,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                         Center(
                           child: Column(
                             children: [
-                              Text('Forgot Password 🔑',
+                              Text('Forgot Password',
                                       style: Theme.of(context).textTheme.displaySmall)
                                   .animate()
                                   .fadeIn(delay: 600.ms)

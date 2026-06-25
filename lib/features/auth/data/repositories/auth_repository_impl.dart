@@ -36,26 +36,85 @@ class AuthRepositoryImpl implements AuthRepository {
     required String password,
     required String role,
     String? fullName,
+    String? phone,
   }) async {
     try {
       final response = await _client.auth.signUp(
         email: email,
         password: password,
-        data: {'full_name': fullName, 'role': role},
+        data: {
+          'full_name': fullName,
+          'role': role,
+          'phone': phone,
+        },
       );
-      if (response.user == null)
+      if (response.user == null) {
         throw const AuthException(message: 'Sign-up failed.');
+      }
 
-      await _client.from('profiles').upsert({
-        'id': response.user!.id,
-        'role': role,
-        'full_name': fullName,
-        'email': email,
-      });
+      if (response.session != null) {
+        try {
+          await _client.from('profiles').upsert({
+            'id': response.user!.id,
+            'role': role,
+            'full_name': fullName,
+            'phone': phone,
+          });
+        } catch (_) {}
+      }
 
       return await _fetchProfile(response.user!.id, email);
     } on AuthException {
       rethrow;
+    } catch (e) {
+      throw AuthException(message: e.toString());
+    }
+  }
+
+  @override
+  Future<void> verifyOTP({
+    required String email,
+    required String code,
+    required String type,
+  }) async {
+    try {
+      final otpType = type == 'signup' ? OtpType.signup : OtpType.recovery;
+      final response = await _client.auth.verifyOTP(
+        email: email,
+        token: code,
+        type: otpType,
+      );
+
+      if (type == 'signup' && response.user != null) {
+        final user = response.user!;
+        final meta = user.userMetadata ?? {};
+        final role = meta['role'] as String? ?? 'buyer';
+        final fullName = meta['full_name'] as String?;
+        final phone = meta['phone'] as String?;
+        
+        await _client.from('profiles').upsert({
+          'id': user.id,
+          'role': role,
+          'full_name': fullName,
+          'phone': phone,
+        });
+      }
+    } catch (e) {
+      throw AuthException(message: e.toString());
+    }
+  }
+
+  @override
+  Future<void> resendOTP({
+    required String email,
+    required String type,
+  }) async {
+    try {
+      final otpType = type == 'signup' ? OtpType.signup : OtpType.recovery;
+      await _client.auth.resend(
+        email: email,
+        type: otpType,
+      );
     } catch (e) {
       throw AuthException(message: e.toString());
     }
@@ -87,6 +146,16 @@ class AuthRepositoryImpl implements AuthRepository {
       await _client.auth.updateUser(
         UserAttributes(password: newPassword),
       );
+    } catch (e) {
+      throw AuthException(message: e.toString());
+    }
+  }
+
+  @override
+  Future<void> deleteAccount() async {
+    try {
+      await _client.rpc('delete_user');
+      await signOut();
     } catch (e) {
       throw AuthException(message: e.toString());
     }

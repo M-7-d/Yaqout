@@ -75,10 +75,23 @@ class NotificationService {
 
     final context = rootNavigatorKey.currentContext;
     if (context == null) {
-      debugPrint('NotificationService: rootNavigatorKey.currentContext is null. Cannot navigate.');
+      debugPrint(
+          'NotificationService: rootNavigatorKey.currentContext is null. Cannot navigate.');
       return;
     }
 
+    // Standardized deep link format (recommended)
+    final deepLink = data['deeplink'] as String? ??
+        data['deepLink'] as String? ??
+        data['deep_link'] as String?;
+
+    if (deepLink != null && deepLink.isNotEmpty) {
+      final mappedRoute = _mapStandardDeepLinkToRoute(deepLink);
+      context.go(mappedRoute);
+      return;
+    }
+
+    // Legacy type-based routing (backward compatibility)
     final type = data['type'] as String?;
     if (type == 'chat') {
       final roomId = data['roomId'] as String?;
@@ -96,5 +109,31 @@ class NotificationService {
         context.go('/products/$productId');
       }
     }
+  }
+
+  /// Maps standardized deep link format to actual app routes.
+  /// 
+  /// Standardized format:
+  /// - /product/:id  -> /products/:id
+  /// - /chat/:id     -> /chat/:id
+  /// - /live/:id     -> /live/:id
+  String _mapStandardDeepLinkToRoute(String deepLink) {
+    // Remove leading/trailing whitespace and split
+    final path = deepLink.trim();
+    
+    // Map /product/:id to /products/:id
+    if (path.startsWith('/product/')) {
+      final id = path.substring('/product/'.length);
+      return '/products/$id';
+    }
+    
+    // /chat/:id and /live/:id already match the router
+    if (path.startsWith('/chat/') || path.startsWith('/live/')) {
+      return path;
+    }
+    
+    // If no match, return as-is (fallback)
+    debugPrint('NotificationService: Unknown deep link format: $deepLink');
+    return deepLink;
   }
 }

@@ -8,7 +8,6 @@ import '../../../../core/constants/app_colors.dart';
 import '../../domain/entities/product_entity.dart';
 import '../providers/product_provider.dart';
 import '../../../../features/auth/presentation/providers/auth_provider.dart';
-import '../../../../features/auth/domain/entities/user_entity.dart';
 import '../../../reviews/presentation/providers/review_provider.dart';
 import '../../../reviews/presentation/widgets/write_review_widget.dart';
 import '../../../../shared/widgets/expandable_text_widget.dart';
@@ -48,10 +47,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     }
   }
 
-  void _openChatAboutProduct(UserEntity? buyer, ProductEntity p) {
-    if (buyer == null) return;
+  void _openChatAboutProduct(String? buyerId, ProductEntity p) {
+    if (buyerId == null) return;
     context.push(
-      '/chat/new?sellerId=${p.sellerId}&buyerId=${buyer.id}&productId=${p.id}',
+      '/chat/new?sellerId=${p.sellerId}&buyerId=$buyerId&productId=${p.id}',
     );
   }
 
@@ -104,6 +103,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   Widget build(BuildContext context) {
     final product = ref.watch(productDetailProvider(widget.productId));
     final user = ref.watch(authNotifierProvider).valueOrNull;
+    final userId = user?.id;
+    final isAdmin = user?.isAdmin ?? false;
 
     return product.when(
       loading: () => const Scaffold(
@@ -129,9 +130,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
 
         final currentUrl = n == 0 ? '' : images[idx];
         final canMessageSeller =
-            user != null && user.id != p.sellerId;
-        final isOwnerOrAdmin = user != null &&
-            (user.id == p.sellerId || user.isAdmin);
+            userId != null && userId != p.sellerId;
+        final isOwnerOrAdmin = userId != null &&
+            (userId == p.sellerId || isAdmin);
 
         return Scaffold(
           body: CustomScrollView(
@@ -173,6 +174,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                           itemCount: n,
                           itemBuilder: (ctx, i) => CachedNetworkImage(
                             imageUrl: images[i],
+                            memCacheWidth: 1200,
+                            memCacheHeight: 1200,
                             errorListener: (_) {},
                             fit: BoxFit.cover,
                             placeholder: (_, __) =>
@@ -187,6 +190,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                       else if (currentUrl.isNotEmpty)
                         CachedNetworkImage(
                           imageUrl: currentUrl,
+                          memCacheWidth: 1200,
+                          memCacheHeight: 1200,
                           errorListener: (_) {},
                           fit: BoxFit.cover,
                           placeholder: (_, __) =>
@@ -281,6 +286,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                               clipBehavior: Clip.antiAlias,
                               child: CachedNetworkImage(
                                 imageUrl: images[i],
+                                memCacheWidth: 272,
+                                memCacheHeight: 272,
                                 errorListener: (_) {},
                                 fit: BoxFit.cover,
                                 placeholder: (_, __) => Container(
@@ -397,6 +404,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                         imageUrl: p.sellerAvatar!,
                                         width: 36,
                                         height: 36,
+                                        memCacheWidth: 72,
+                                        memCacheHeight: 72,
                                         fit: BoxFit.cover,
                                         placeholder: (_, __) => Container(
                                           width: 36,
@@ -548,7 +557,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                               backgroundImage: (review.reviewerAvatar != null &&
                                                       review.reviewerAvatar!.isNotEmpty)
                                                   ? CachedNetworkImageProvider(
-                                                      review.reviewerAvatar!)
+                                                      review.reviewerAvatar!,
+                                                      maxWidth: 64,
+                                                      maxHeight: 64,
+                                                    )
                                                   : null,
                                               child: (review.reviewerAvatar == null ||
                                                       review.reviewerAvatar!.isEmpty)
@@ -659,7 +671,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                         child: OutlinedButton.icon(
                           icon: const Icon(Icons.forum_outlined),
                           label: const Text('Message seller'),
-                          onPressed: () => _openChatAboutProduct(user, p),
+                          onPressed: () => _openChatAboutProduct(userId, p),
                         ),
                       ),
                     ],

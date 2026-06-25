@@ -52,14 +52,57 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserEntity?>> {
     required String password,
     required String role,
     String? fullName,
+    String? phone,
   }) async {
     state = const AsyncValue.loading();
-    state = await AsyncValue.guard(
-      () => _repo.signUp(
-          email: email, password: password, role: role, fullName: fullName),
-    );
-    if (state.valueOrNull != null) {
-      _notificationService.loginUser(state.valueOrNull!.id);
+    try {
+      await _repo.signUp(
+        email: email,
+        password: password,
+        role: role,
+        fullName: fullName,
+        phone: phone,
+      );
+      final currentUser = await _repo.getCurrentUser();
+      if (currentUser != null) {
+        _notificationService.loginUser(currentUser.id);
+        state = AsyncValue.data(currentUser);
+      } else {
+        state = const AsyncValue.data(null);
+      }
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+      rethrow;
+    }
+  }
+
+  Future<void> verifyOTP({
+    required String email,
+    required String code,
+    required String type,
+  }) async {
+    state = const AsyncValue.loading();
+    try {
+      await _repo.verifyOTP(email: email, code: code, type: type);
+      final user = await _repo.getCurrentUser();
+      if (user != null) {
+        _notificationService.loginUser(user.id);
+      }
+      state = AsyncValue.data(user);
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+      rethrow;
+    }
+  }
+
+  Future<void> resendOTP({
+    required String email,
+    required String type,
+  }) async {
+    try {
+      await _repo.resendOTP(email: email, type: type);
+    } catch (e) {
+      rethrow;
     }
   }
 
@@ -127,6 +170,20 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserEntity?>> {
       state = AsyncValue.data(user);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
+      rethrow;
+    }
+  }
+
+  Future<void> deleteAccount() async {
+    state = const AsyncValue.loading();
+    try {
+      await _repo.deleteAccount();
+      _notificationService.logoutUser();
+      state = const AsyncValue.data(null);
+    } catch (e, st) {
+      // Revert loading state by fetching current user if delete fails
+      final user = await _repo.getCurrentUser();
+      state = AsyncValue.data(user);
       rethrow;
     }
   }

@@ -1,3 +1,4 @@
+import 'dart:developer' as dev;
 import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -5,6 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as path;
 import '../../../../core/constants/app_colors.dart';
 import '../../domain/entities/product_entity.dart';
 import '../providers/product_provider.dart';
@@ -58,17 +62,68 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
 
   int get _totalSelectedImages => _keptImageUrls.length + _newImages.length;
 
+  Future<File?> _compressImage(File file) async {
+    try {
+      final targetSize = 400 * 1024; // 400 KB target
+      final dir = await getTemporaryDirectory();
+      final targetPath = path.join(dir.path, 'compressed_${DateTime.now().millisecondsSinceEpoch}.jpg');
+
+      var result = await FlutterImageCompress.compressAndGetFile(
+        file.absolute.path,
+        targetPath,
+        quality: 85,
+        minWidth: 800,
+        minHeight: 800,
+      );
+
+      // If still too large, reduce quality progressively
+      int quality = 85;
+      while (result != null && await File(result.path).length() > targetSize && quality > 50) {
+        quality -= 10;
+        result = await FlutterImageCompress.compressAndGetFile(
+          file.absolute.path,
+          targetPath,
+          quality: quality,
+          minWidth: 800,
+          minHeight: 800,
+        );
+      }
+
+      return result != null ? File(result.path) : null;
+    } catch (e) {
+      dev.log('Image compression error: $e');
+      return file; // Return original if compression fails
+    }
+  }
+
   Future<void> _pickImages() async {
     final remaining = 5 - _totalSelectedImages;
     if (remaining <= 0) return;
     final picker = ImagePicker();
     final picked = await picker.pickMultiImage(imageQuality: 80);
     if (picked.isEmpty) return;
-    setState(() {
+    
+    setState(() => _isLoading = true);
+    
+    try {
+      final compressedImages = <File>[];
       for (final x in picked.take(remaining)) {
-        _newImages.add(File(x.path));
+        final compressed = await _compressImage(File(x.path));
+        if (compressed != null) {
+          compressedImages.add(compressed);
+        }
       }
-    });
+      
+      if (mounted) {
+        setState(() {
+          _newImages.addAll(compressedImages);
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   void _invalidateProductCaches({required String productId, required String sellerId}) {
@@ -259,7 +314,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                   Text(
                     'Adding clear photos and a detailed description helps you sell faster.',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.8),
+                      color: Colors.white.withValues(alpha: 0.8),
                       fontSize: 14,
                     ),
                   ).animate().fadeIn(delay: 400.ms).slideX(begin: -0.1, end: 0),
@@ -302,6 +357,8 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                               showMainBadge: idx == 0,
                               child: CachedNetworkImage(
                                 imageUrl: _keptImageUrls[idx],
+                                memCacheWidth: 216,
+                                memCacheHeight: 216,
                                 errorListener: (_) {},
                                 fit: BoxFit.cover,
                                 placeholder: (_, __) => Container(color: AppColors.shimmerBase),
@@ -396,14 +453,14 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
 
                     Container(
                       decoration: BoxDecoration(
-                        color: AppColors.errorLight.withOpacity(0.3),
+                        color: AppColors.errorLight.withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: AppColors.errorLight),
                       ),
                       child: SwitchListTile(
                         title: const Text('Mark as "Stock is empty"'),
                         subtitle: const Text('Tell buyers this product is finished'),
-                        activeColor: AppColors.error,
+                        activeThumbColor: AppColors.error,
                         value: _isOutOfStock,
                         onChanged: (val) {
                           if (val) {
@@ -426,7 +483,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                         gradient: AppColors.primaryGradient,
                         boxShadow: [
                           BoxShadow(
-                            color: AppColors.primary.withOpacity(0.3),
+                            color: AppColors.primary.withValues(alpha: 0.3),
                             blurRadius: 12,
                             offset: const Offset(0, 6),
                           ),
@@ -519,14 +576,14 @@ class _AddPhotoSelector extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppColors.primaryLight,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: AppColors.primary.withOpacity(0.2), width: 1.5),
+            border: Border.all(color: AppColors.primary.withValues(alpha: 0.2), width: 1.5),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
                 Icons.add_a_photo_outlined,
-                color: enabled ? AppColors.primary.withOpacity(0.85) : AppColors.textHint,
+                color: enabled ? AppColors.primary.withValues(alpha: 0.85) : AppColors.textHint,
                 size: 32,
               ),
               const SizedBox(width: 12),
@@ -600,7 +657,7 @@ class _RemovableImageTile extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.92),
+                  color: AppColors.primary.withValues(alpha: 0.92),
                   borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
                 ),
                 child: const Text(

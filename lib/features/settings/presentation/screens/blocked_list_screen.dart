@@ -95,6 +95,8 @@ class BlockedListScreen extends ConsumerWidget {
                         imageUrl: user.avatarUrl!,
                         width: 48,
                         height: 48,
+                        memCacheWidth: 96,
+                        memCacheHeight: 96,
                         fit: BoxFit.cover,
                         placeholder: (_, __) =>
                             const CircularProgressIndicator(strokeWidth: 2),

@@ -10,6 +10,7 @@ import '../../domain/entities/chat_entities.dart';
 import '../providers/chat_provider.dart';
 import '../../../../features/auth/presentation/providers/auth_provider.dart';
 import '../../../../features/settings/presentation/providers/blocked_users_provider.dart';
+import '../../../../features/settings/presentation/providers/muted_users_provider.dart';
 import '../theme/chat_theme.dart';
 import '../widgets/chat_wallpaper.dart';
 import '../widgets/whatsapp_message_bubble.dart';
@@ -222,7 +223,11 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
                         backgroundColor: ChatTheme.headerLight,
                         backgroundImage: (otherAvatar != null &&
                                 otherAvatar.isNotEmpty)
-                            ? CachedNetworkImageProvider(otherAvatar)
+                            ? CachedNetworkImageProvider(
+                                otherAvatar,
+                                maxWidth: 72,
+                                maxHeight: 72,
+                              )
                             : null,
                         child: (otherAvatar == null || otherAvatar.isEmpty)
                             ? Text(
@@ -262,31 +267,35 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
               ),
               offset: const Offset(0, 48),
               onSelected: (value) => _onMenuSelected(value, otherName, otherId,
-                  otherAvatar, context),
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'view_profile',
-                  child: Row(
-                    children: [
-                      Icon(Icons.person_outline, color: ChatTheme.metaText,
-                          size: 20),
-                      SizedBox(width: 12),
-                      Text('View profile'),
-                    ],
+                  otherAvatar, context, ref),
+              itemBuilder: (context) {
+                final isMuted = otherId != null && ref.watch(mutedUsersProvider.notifier).isMuted(otherId);
+                return [
+                  const PopupMenuItem(
+                    value: 'view_profile',
+                    child: Row(
+                      children: [
+                        Icon(Icons.person_outline, color: ChatTheme.metaText,
+                            size: 20),
+                        SizedBox(width: 12),
+                        Text('View profile'),
+                      ],
+                    ),
                   ),
-                ),
-                const PopupMenuItem(
-                  value: 'mute',
-                  child: Row(
-                    children: [
-                      Icon(Icons.notifications_off_outlined,
-                          color: ChatTheme.metaText, size: 20),
-                      SizedBox(width: 12),
-                      Text('Mute'),
-                    ],
+                  PopupMenuItem(
+                    value: isMuted ? 'unmute' : 'mute',
+                    child: Row(
+                      children: [
+                        Icon(
+                          isMuted ? Icons.notifications_active_outlined : Icons.notifications_off_outlined,
+                          color: ChatTheme.metaText, size: 20
+                        ),
+                        const SizedBox(width: 12),
+                        Text(isMuted ? 'Unmute' : 'Mute'),
+                      ],
+                    ),
                   ),
-                ),
-                const PopupMenuDivider(),
+                  const PopupMenuDivider(),
                 const PopupMenuItem(
                   value: 'block',
                   child: Row(
@@ -309,7 +318,8 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
                     ],
                   ),
                 ),
-              ],
+              ];  
+            },  
             ),
           ],
         ),
@@ -379,15 +389,27 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
     String? otherId,
     String? otherAvatar,
     BuildContext context,
+    WidgetRef ref,
   ) {
     switch (value) {
       case 'view_profile':
         if (otherId != null) context.push('/sellers/$otherId');
         break;
       case 'mute':
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$otherName has been muted')),
-        );
+        if (otherId != null) {
+          ref.read(mutedUsersProvider.notifier).muteUser(otherId, otherName);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('$otherName has been muted')),
+          );
+        }
+        break;
+      case 'unmute':
+        if (otherId != null) {
+          ref.read(mutedUsersProvider.notifier).unmuteUser(otherId);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('$otherName has been unmuted')),
+          );
+        }
         break;
       case 'block':
         showDialog(

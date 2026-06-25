@@ -122,7 +122,8 @@ serve(async (req) => {
       contents: { en: streamTitle },
       data: {
         type: 'live',
-        streamId: streamId
+        streamId: streamId,
+        deeplink: `/live/${streamId}`
       }
     }
 

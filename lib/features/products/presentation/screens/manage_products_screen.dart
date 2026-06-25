@@ -13,7 +13,7 @@ class ManageProductsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(authNotifierProvider).valueOrNull;
+    final userId = ref.watch(authNotifierProvider.select((u) => u.valueOrNull?.id));
 
     return Scaffold(
       appBar: AppBar(
@@ -31,12 +31,12 @@ class ManageProductsScreen extends ConsumerWidget {
         decoration: const BoxDecoration(
           color: AppColors.surface,
         ),
-        child: user == null
+        child: userId == null
             ? const ProductEmptyState(
                 message: 'Please login to manage your products',
                 icon: Icons.account_circle_outlined,
               )
-            : _MyProductsList(userId: user.id),
+            : _MyProductsList(userId: userId),
       ),
     );
   }

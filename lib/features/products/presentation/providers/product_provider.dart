@@ -45,7 +45,7 @@ class PaginatedProductsNotifier extends StateNotifier<AsyncValue<List<ProductEnt
       final newItems = await _repo.getProducts(_filter.copyWith(page: nextPage));
       _hasMore = newItems.length == 20;
       state = AsyncValue.data([...currentList, ...newItems]);
-    } catch (e, st) {
+    } catch (e) {
       // Ignore error for pagination or handle appropriately
     }
   }

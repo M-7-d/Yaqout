@@ -17,8 +17,19 @@ abstract class StreamRepository {
   /// Host calls this every 30s to signal the stream is still active.
   Future<void> updateHeartbeat(String streamId);
 
+  @Deprecated('Use trackPresence and watchPresence instead')
   Future<void> incrementViewerCount(String streamId);
+  @Deprecated('Use trackPresence and watchPresence instead')
   Future<void> decrementViewerCount(String streamId);
+
+  /// Track user presence in a live stream using Realtime Presence
+  void trackPresence(String streamId, Map<String, dynamic> presenceState);
+
+  /// Watch presence state changes for a stream to get viewer count
+  Stream<int> watchViewerCount(String streamId);
+
+  /// Stop tracking presence for a stream
+  void untrackPresence(String streamId);
 
   Stream<List<LiveStreamEntity>> watchLiveStreams();
 

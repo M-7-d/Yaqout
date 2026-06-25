@@ -119,6 +119,8 @@ class _MediaContent extends StatelessWidget {
         children: [
           CachedNetworkImage(
             imageUrl: message.mediaUrl!,
+            memCacheWidth: 480,
+            memCacheHeight: 360,
             fit: BoxFit.cover,
             width: 240,
             placeholder: (_, __) => Container(

@@ -41,6 +41,13 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
@@ -49,5 +56,11 @@
 	<string>Yakut needs camera access for live streaming and taking product photos.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Yakut needs microphone access for live streaming and recording video.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
+	<key>NSUserTrackingUsageDescription</key>
+	<string>Yakut needs tracking permission for personalized notifications and analytics.</string>
 </dict>
 </plist>

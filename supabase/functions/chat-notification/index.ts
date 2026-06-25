@@ -82,6 +82,21 @@ serve(async (req) => {
       }
     }
 
+    // 2c. Check if receiver muted the sender
+    const { data: muteData } = await supabase
+      .from('chat_mutes')
+      .select('id')
+      .eq('muted_by_id', receiverId)
+      .eq('muted_user_id', record.sender_id)
+      .maybeSingle()
+
+    if (muteData) {
+      console.log('Receiver has muted the sender — skipping')
+      return new Response(JSON.stringify({ skipped: true, reason: 'sender is muted' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
+
     // 3. Get sender profile for display name
     const { data: senderProfile, error: profileError } = await supabase
       .from('profiles')
@@ -117,7 +132,8 @@ serve(async (req) => {
       contents: { en: messageContent },
       data: {
         type: 'chat',
-        roomId: record.room_id
+        roomId: record.room_id,
+        deeplink: `/chat/${record.room_id}`
       }
     }
 

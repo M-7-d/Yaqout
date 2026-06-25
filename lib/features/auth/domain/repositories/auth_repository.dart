@@ -20,6 +20,20 @@ abstract class AuthRepository {
     required String password,
     required String role,
     String? fullName,
+    String? phone,
+  });
+
+  /// Verifies an OTP code for signup or recovery.
+  Future<void> verifyOTP({
+    required String email,
+    required String code,
+    required String type,
+  });
+
+  /// Resends an OTP code for signup or recovery.
+  Future<void> resendOTP({
+    required String email,
+    required String type,
   });
 
   Future<void> signOut();
@@ -27,6 +41,9 @@ abstract class AuthRepository {
   Future<void> sendPasswordReset(String email);
   Future<void> verifyPasswordResetCode({required String email, required String code});
   Future<void> updatePassword(String newPassword);
+  
+  /// Deletes the current user account via RPC call and signs them out.
+  Future<void> deleteAccount();
 
   /// Emits the current user whenever auth state changes; null = signed out.
   Stream<UserEntity?> get authStateChanges;

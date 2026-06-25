@@ -44,7 +44,7 @@ class ChatListScreen extends ConsumerWidget {
         appBar: AppBar(
           backgroundColor: ChatTheme.headerBg,
           elevation: 0,
-          centerTitle: false,
+          centerTitle: true,
           title: const Text(
             'Chats',
             style: TextStyle(
@@ -196,6 +196,8 @@ class _ChatListTile extends StatelessWidget {
                         imageUrl: room.otherUserAvatar!,
                         width: 52,
                         height: 52,
+                        memCacheWidth: 104,
+                        memCacheHeight: 104,
                         fit: BoxFit.cover,
                         placeholder: (_, __) => const SizedBox(
                           width: 20,

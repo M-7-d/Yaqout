@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/repositories/settings_repository.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../../shared/providers/shared_providers.dart';
 import 'settings_provider.dart';
 
 class BlockedUser {
@@ -29,9 +31,10 @@ class BlockedUser {
 
 class BlockedUsersNotifier extends StateNotifier<List<BlockedUser>> {
   final SettingsRepository _repo;
+  final SupabaseClient _supabase;
   static const _key = 'blocked_users_list_v1';
 
-  BlockedUsersNotifier(this._repo) : super([]) {
+  BlockedUsersNotifier(this._repo, this._supabase) : super([]) {
     _load();
   }
 
@@ -54,6 +57,22 @@ class BlockedUsersNotifier extends StateNotifier<List<BlockedUser>> {
     final updated = state.where((u) => u.id != id).toList();
     state = updated;
     await _save();
+    
+    // Also remove from live_stream_blocks in Supabase
+    try {
+      final currentUserId = _supabase.auth.currentUser?.id;
+      if (currentUserId != null) {
+        await _supabase
+            .from('live_stream_blocks')
+            .delete()
+            .match({
+              'blocked_user_id': id,
+              'blocked_by_id': currentUserId,
+            });
+      }
+    } catch (e) {
+      // Ignore errors if it fails or doesn't exist
+    }
   }
 
   bool isBlocked(String id) {
@@ -68,5 +87,8 @@ class BlockedUsersNotifier extends StateNotifier<List<BlockedUser>> {
 
 final blockedUsersProvider =
     StateNotifierProvider<BlockedUsersNotifier, List<BlockedUser>>((ref) {
-  return BlockedUsersNotifier(ref.read(settingsRepositoryProvider));
+  return BlockedUsersNotifier(
+    ref.read(settingsRepositoryProvider),
+    ref.read(supabaseClientProvider),
+  );
 });

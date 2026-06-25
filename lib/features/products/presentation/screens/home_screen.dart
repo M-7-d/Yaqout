@@ -40,7 +40,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) {
     final featured   = ref.watch(featuredProductsProvider);
     final allProducts= ref.watch(productsProvider(_currentFilter));
-    final user       = ref.watch(authNotifierProvider).valueOrNull;
+    final userName   = ref.watch(authNotifierProvider.select((u) => u.valueOrNull?.fullName));
+    final isSeller    = ref.watch(authNotifierProvider.select((u) => u.valueOrNull?.isSeller ?? false));
+    final isAdmin    = ref.watch(authNotifierProvider.select((u) => u.valueOrNull?.isAdmin ?? false));
 
     return Scaffold(
       appBar: AppBar(
@@ -79,205 +81,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           },
           child: CustomScrollView(
             slivers: [
-              // ── Curved Header ───────────────────────────────────────────────
-              SliverToBoxAdapter(
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    // Curved background
-                    ClipPath(
-                      clipper: _HeaderCurveClipper(),
-                      child: Container(
-                        height: 220,
-                        decoration: const BoxDecoration(
-                          gradient: AppColors.primaryGradient,
-                        ),
-                      ),
-                    ).animate().slideY(begin: -1, end: 0, duration: 600.ms, curve: Curves.easeOutQuad),
-                    
-                    ClipPath(
-                      clipper: _HeaderCurveClipper(),
-                      child: Container(
-                        height: 220,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              AppColors.primaryLight.withOpacity(0.1),
-                              AppColors.primaryDark.withOpacity(0.05),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ).animate(onPlay: (controller) => controller.repeat(reverse: true)).moveY(begin: 0, end: 15, duration: 3.seconds, curve: Curves.easeInOut),
-
-                    Positioned(
-                      left: 20,
-                      top: 110,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Hello, ${user?.fullName?.split(' ')[0] ?? 'Explorer'}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Find your next treasure today',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.8),
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ).animate().fadeIn(delay: 300.ms).slideX(begin: -0.1, end: 0),    
-                  ],
-                ),
+              _HeaderSection(userName: userName),
+              _FeaturedSection(featured: featured),
+              _ProductsHeaderSection(
+                selectedSort: _selectedSort,
+                activeSortLabel: _activeSortLabel,
+                onSortTap: () => _showSortSheet(context),
               ),
-
-              // ── Featured banner ─────────────────────────────────────────────
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(0, 8, 0, 0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      featured.when(
-                        data:  (list) => list.isEmpty
-                            ? const SizedBox.shrink()
-                            : _FeaturedCarousel(products: list),
-                        loading: () => _FeaturedShimmer(),
-                        error:   (e, _) => const SizedBox.shrink(),
-                      ),
-                    ],
-                  ),
-                ).animate().fadeIn(delay: 200.ms),
+              _ProductsGridSection(
+                allProducts: allProducts,
+                currentFilter: _currentFilter,
               ),
-
-              // ── "All Products" heading + Filter button ──────────────────────
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('All Products',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.black)),
-                      GestureDetector(
-                        onTap: () => _showSortSheet(context),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: _selectedSort != ProductSortBy.newest
-                                ? AppColors.primary.withOpacity(0.15)
-                                : AppColors.card,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: _selectedSort != ProductSortBy.newest
-                                  ? AppColors.primary.withOpacity(0.5)
-                                  : AppColors.border.withOpacity(0.5),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.sort_rounded,
-                                size: 18,
-                                color: _selectedSort != ProductSortBy.newest
-                                    ? AppColors.primary
-                                    : AppColors.textHint,
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                _activeSortLabel,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: _selectedSort != ProductSortBy.newest
-                                      ? AppColors.primary
-                                      : AppColors.textHint,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              allProducts.when(
-                data: (list) => SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                  sliver: list.isEmpty
-                      ? SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.only(top: 60),
-                            child: Center(
-                              child: Column(
-                                children: [
-                                  Icon(Icons.search_off_rounded, size: 48, color: AppColors.textHint.withOpacity(0.5)),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    'No products found',
-                                    style: TextStyle(
-                                      color: AppColors.textHint,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        )
-                      : SliverGrid(
-                          delegate: SliverChildBuilderDelegate(
-                            (ctx, i) => ProductCard(product: list[i], index: i),
-                            childCount: list.length,
-                          ),
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            mainAxisSpacing: 12,
-                            crossAxisSpacing: 12,
-                            childAspectRatio: 0.72,
-                          ),
-                        ),
-                ),
-                loading: () => SliverToBoxAdapter(child: _GridShimmer()),
-                error: (e, _) => SliverToBoxAdapter(
-                  child: Center(
-                    child: Text(AppStrings.genericError,
-                        style: Theme.of(context).textTheme.bodyMedium),
-                  ),
-                ),
-              ),
-              
-              // Load more indicator
-              if (allProducts.hasValue && ref.read(productsProvider(_currentFilter).notifier).hasMore)
-                const SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.only(bottom: 100.0, top: 16),
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-                )
-              else
-                const SliverToBoxAdapter(
-                  child: SizedBox(height: 100),
-                ),
             ],
           ),
         ),
       ),
 
-      // FAB for sellers
-      floatingActionButton: user?.isSeller == true || user?.isAdmin == true
+      floatingActionButton: isSeller || isAdmin
           ? FloatingActionButton.extended(
               onPressed: () => context.push('/products/new'),
               backgroundColor: AppColors.primary,
@@ -326,7 +146,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       color: isSelected ? null : AppColors.surface,
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: isSelected ? Colors.transparent : AppColors.border.withOpacity(0.5),
+                        color: isSelected ? Colors.transparent : AppColors.border.withValues(alpha: 0.5),
                       ),
                     ),
                     child: Row(
@@ -387,6 +207,8 @@ class _FeaturedCarousel extends StatelessWidget {
                     Positioned.fill(
                       child: CachedNetworkImage(
                         imageUrl: p.primaryImage,
+                        memCacheWidth: 800,
+                        memCacheHeight: 800,
                         errorListener: (_) {},
                         fit: BoxFit.cover,
                         color: Colors.black26,
@@ -485,6 +307,241 @@ class _GridShimmer extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ── Header Section ─────────────────────────────────────────────────────────
+class _HeaderSection extends StatelessWidget {
+  final String? userName;
+  const _HeaderSection({required this.userName});
+
+  @override
+  Widget build(BuildContext context) {
+    return SliverToBoxAdapter(
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          ClipPath(
+            clipper: _HeaderCurveClipper(),
+            child: Container(
+              height: 220,
+              decoration: const BoxDecoration(
+                gradient: AppColors.primaryGradient,
+              ),
+            ),
+          ).animate().slideY(begin: -1, end: 0, duration: 600.ms, curve: Curves.easeOutQuad),
+          ClipPath(
+            clipper: _HeaderCurveClipper(),
+            child: Container(
+              height: 220,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    AppColors.primaryLight.withValues(alpha: 0.1),
+                    AppColors.primaryDark.withValues(alpha: 0.05),
+                  ],
+                ),
+              ),
+            ),
+          ).animate(onPlay: (controller) => controller.repeat(reverse: true)).moveY(begin: 0, end: 15, duration: 3.seconds, curve: Curves.easeInOut),
+          Positioned(
+            left: 20,
+            top: 110,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Hello, ${userName?.split(' ')[0] ?? 'Explorer'}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Find your next treasure today',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.8),
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          ).animate().fadeIn(delay: 300.ms).slideX(begin: -0.1, end: 0),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Featured Section ───────────────────────────────────────────────────────
+class _FeaturedSection extends StatelessWidget {
+  final AsyncValue<List<ProductEntity>> featured;
+  const _FeaturedSection({required this.featured});
+
+  @override
+  Widget build(BuildContext context) {
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(0, 8, 0, 0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            featured.when(
+              data: (list) => list.isEmpty
+                  ? const SizedBox.shrink()
+                  : _FeaturedCarousel(products: list),
+              loading: () => _FeaturedShimmer(),
+              error: (e, _) => const SizedBox.shrink(),
+            ),
+          ],
+        ),
+      ).animate().fadeIn(delay: 200.ms),
+    );
+  }
+}
+
+// ── Products Header Section ────────────────────────────────────────────────
+class _ProductsHeaderSection extends StatelessWidget {
+  final ProductSortBy selectedSort;
+  final String activeSortLabel;
+  final VoidCallback onSortTap;
+  const _ProductsHeaderSection({
+    required this.selectedSort,
+    required this.activeSortLabel,
+    required this.onSortTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('All Products',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.black)),
+            GestureDetector(
+              onTap: onSortTap,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: selectedSort != ProductSortBy.newest
+                      ? AppColors.primary.withValues(alpha: 0.15)
+                      : AppColors.card,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: selectedSort != ProductSortBy.newest
+                        ? AppColors.primary.withValues(alpha: 0.5)
+                        : AppColors.border.withValues(alpha: 0.5),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.sort_rounded,
+                      size: 18,
+                      color: selectedSort != ProductSortBy.newest
+                          ? AppColors.primary
+                          : AppColors.textHint,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      activeSortLabel,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: selectedSort != ProductSortBy.newest
+                            ? AppColors.primary
+                            : AppColors.textHint,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Products Grid Section ──────────────────────────────────────────────────
+class _ProductsGridSection extends ConsumerWidget {
+  final AsyncValue<List<ProductEntity>> allProducts;
+  final ProductFilter currentFilter;
+  const _ProductsGridSection({
+    required this.allProducts,
+    required this.currentFilter,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return SliverMainAxisGroup(
+      slivers: [
+        allProducts.when(
+          data: (list) => SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            sliver: list.isEmpty
+                ? SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 60),
+                      child: Center(
+                        child: Column(
+                          children: [
+                            Icon(Icons.search_off_rounded, size: 48, color: AppColors.textHint.withValues(alpha: 0.5)),
+                            const SizedBox(height: 12),
+                            Text(
+                              'No products found',
+                              style: TextStyle(
+                                color: AppColors.textHint,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  )
+                : SliverGrid(
+                    delegate: SliverChildBuilderDelegate(
+                      (ctx, i) => ProductCard(product: list[i], index: i),
+                      childCount: list.length,
+                    ),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                      childAspectRatio: 0.72,
+                    ),
+                  ),
+          ),
+          loading: () => SliverToBoxAdapter(child: _GridShimmer()),
+          error: (e, _) => SliverToBoxAdapter(
+            child: Center(
+              child: Text(AppStrings.genericError,
+                  style: Theme.of(context).textTheme.bodyMedium),
+            ),
+          ),
+        ),
+        if (allProducts.hasValue && ref.read(productsProvider(currentFilter).notifier).hasMore)
+          const SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.only(bottom: 100.0, top: 16),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          )
+        else
+          const SliverToBoxAdapter(
+            child: SizedBox(height: 100),
+          ),
+      ],
     );
   }
 }

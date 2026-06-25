@@ -128,7 +128,8 @@ serve(async (req) => {
       data: {
         type: 'rating',
         productId: record.product_id,
-        reviewId: record.id
+        reviewId: record.id,
+        deeplink: `/products/${record.product_id}`
       }
     }
 
