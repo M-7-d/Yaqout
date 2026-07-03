@@ -16,8 +16,7 @@ workflows:
       events:
         - push
       branch_patterns:
-        - companion: false
-          pattern: main
+        - pattern: main
     scripts:
       - name: Set up .env file
         script: |
@@ -66,8 +65,7 @@ workflows:
       events:
         - push
       branch_patterns:
-        - companion: false
-          pattern: main
+        - pattern: main
     scripts:
       - name: Set up .env file
         script: |
