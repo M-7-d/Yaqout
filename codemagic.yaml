@@ -41,8 +41,6 @@ workflows:
       - build/app/outputs/bundle/release/*.aab
     publishing:
       firebase:
-        # Codemagic automatically loads the FIREBASE_TOKEN environment variable
-        firebase_token: $FIREBASE_TOKEN
         android:
           app_id: $FIREBASE_APP_ID_ANDROID
           # You can specify tester groups created in your Firebase console
@@ -89,7 +87,6 @@ workflows:
       - build/ios/ipa/*.ipa
     publishing:
       firebase:
-        firebase_token: $FIREBASE_TOKEN
         ios:
           app_id: $FIREBASE_APP_ID_IOS
           groups:
