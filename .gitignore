@@ -53,3 +53,5 @@ google-services.json
 GoogleService-Info.plist
 *.g.dart
 *.freezed.dart
+
+testsprite_tests\tmp\config.json

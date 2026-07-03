@@ -1,0 +1,99 @@
+# Codemagic CI/CD configuration for Yakut
+# Reference: https://docs.codemagic.io/yaml-schema/yaml-schema/
+
+workflows:
+  android-workflow:
+    name: Android Build & Firebase Deploy
+    max_build_duration: 30
+    instance_type: mac_mini_m1 # Mac mini runner supports both Android and iOS tools
+    environment:
+      flutter: stable
+      groups:
+        - firebase_credentials # Create this environment group in Codemagic UI and add FIREBASE_TOKEN
+      vars:
+        FIREBASE_APP_ID_ANDROID: "1:18037407587:android:eb2f60b4ee49bebadfdd56" # e.g. 1:123456789:android:abcd1234
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - companion: false
+          pattern: main
+    scripts:
+      - name: Set up .env file
+        script: |
+          echo "Writing dummy/temporary environment variables for build if needed"
+          echo "SUPABASE_URL=https://placeholder.supabase.co" > .env
+          echo "SUPABASE_ANON_KEY=placeholder" >> .env
+      - name: Get Flutter packages
+        script: |
+          flutter packages pub get
+      - name: Run Code Generation (build_runner)
+        script: |
+          dart run build_runner build --delete-conflicting-outputs
+      - name: Run Tests
+        script: |
+          flutter test
+      - name: Build Android Release APK & App Bundle
+        script: |
+          flutter build apk --release
+          flutter build appbundle --release
+    artifacts:
+      - build/app/outputs/flutter-apk/*.apk
+      - build/app/outputs/bundle/release/*.aab
+    publishing:
+      firebase:
+        # Codemagic automatically loads the FIREBASE_TOKEN environment variable
+        firebase_token: $FIREBASE_TOKEN
+        android:
+          app_id: $FIREBASE_APP_ID_ANDROID
+          # You can specify tester groups created in your Firebase console
+          groups:
+            - QA_Team
+            - Developers
+
+  ios-workflow:
+    name: iOS Build & Firebase Deploy
+    max_build_duration: 40
+    instance_type: mac_mini_m1
+    environment:
+      flutter: stable
+      groups:
+        - firebase_credentials
+        # - apple_developer_portal # For iOS code signing (optional: configure via Codemagic UI)
+      vars:
+        FIREBASE_APP_ID_IOS: "YOUR_FIREBASE_IOS_APP_ID" # e.g. 1:123456789:ios:abcd1234
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - companion: false
+          pattern: main
+    scripts:
+      - name: Set up .env file
+        script: |
+          echo "SUPABASE_URL=https://placeholder.supabase.co" > .env
+          echo "SUPABASE_ANON_KEY=placeholder" >> .env
+      - name: Get Flutter packages
+        script: |
+          flutter packages pub get
+      - name: Run Code Generation (build_runner)
+        script: |
+          dart run build_runner build --delete-conflicting-outputs
+      - name: Run Tests
+        script: |
+          flutter test
+      - name: Build iOS IPA (Unsigned/Ad-hoc/AppStore)
+        script: |
+          # Note: Real iOS distribution requires provisioning profiles and certificates.
+          # You can set up automatic code signing in Codemagic UI under App settings.
+          flutter build ipa --release --no-codesign
+    artifacts:
+      - build/ios/ipa/*.ipa
+    publishing:
+      firebase:
+        firebase_token: $FIREBASE_TOKEN
+        ios:
+          app_id: $FIREBASE_APP_ID_IOS
+          groups:
+            - QA_Team
+            - Developers
