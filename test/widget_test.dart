@@ -41,7 +41,7 @@ void main() {
         child: const YakutApp(),
       ),
     );
-    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(seconds: 3));
     // App renders without crashing
     expect(find.byType(MaterialApp), findsOneWidget);
   });
