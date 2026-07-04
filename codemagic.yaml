@@ -38,7 +38,6 @@ workflows:
           flutter build appbundle --release
     artifacts:
       - build/app/outputs/flutter-apk/*.apk
-      - build/app/outputs/bundle/release/*.aab
     publishing:
       firebase:
         firebase_token: 1//039JykTfCf4oTCgYIARAAGAMSNwF-L9IrVX2yOW5ni8srA0Wn41ez19dwHOl7Ozx2UIatV25cBqe0TEUa9FZFL063I1v7CZPqhrI
